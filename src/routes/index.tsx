@@ -29,7 +29,7 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "pen", label: "Livre", icon: "✎" },
   { id: "text", label: "Texto", icon: "T" },
 ];
-const COLORS = ["#ff7a1a", "#ffd60a", "#ffffff", "#2ee6a6", "#3aa0ff", "#ff3b5c"];
+const COLORS: string[] = ["#ff7a1a", "#ffd60a", "#ffffff", "#2ee6a6", "#3aa0ff", "#ff3b5c"];
 
 function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number, t: number) {
   const p = s.pts.map((q) => ({ x: q.x * W, y: q.y * H }));
@@ -42,7 +42,7 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
   ctx.strokeStyle = s.color; ctx.fillStyle = s.color; ctx.lineWidth = lw;
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6 * k;
-  const a0 = p[0], b = p[p.length - 1];
+  const a0 = p[0]!, b = p[p.length - 1]!;
   const head = (from: Pt, to: Pt) => {
     const ang = Math.atan2(to.y - from.y, to.x - from.x), L = lw * 4;
     ctx.setLineDash([]);
@@ -65,7 +65,7 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
     }
     case "pen": {
       ctx.beginPath(); p.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.stroke();
-      if (p.length > 4) head(p[p.length - 4], b);
+      if (p.length > 4) head(p[p.length - 4]!, b);
       break;
     }
     case "circle": case "spot": {
@@ -106,7 +106,7 @@ function Editor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>("arrow");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState<string>(COLORS[0]!);
   const [width, setWidth] = useState(6);
   const [dur, setDur] = useState(3);
   const [shapes, setShapes] = useState<Shape[]>([]);
@@ -163,7 +163,7 @@ function Editor() {
   const move = (e: React.PointerEvent) => {
     if (!draft) return;
     const p = pos(e);
-    setDraft({ ...draft, pts: draft.tool === "pen" ? [...draft.pts, p] : [draft.pts[0], p] });
+    setDraft({ ...draft, pts: draft.tool === "pen" ? [...draft.pts, p] : [draft.pts[0]!, p] });
   };
   const up = () => {
     if (draft) setShapes((s) => [...s, draft]);
