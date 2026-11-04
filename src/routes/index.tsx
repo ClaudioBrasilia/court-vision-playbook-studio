@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { Crosshair, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { recordSample, trajectoryPosition, type TrajectorySample } from "@/lib/live-trajectory";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -17,7 +20,7 @@ export const Route = createFileRoute("/")({
 
 type Tool = "arrow" | "dashed" | "line" | "circle" | "zone" | "pen" | "text" | "spot";
 type Pt = { x: number; y: number };
-type Shape = { id: number; tool: Tool; pts: Pt[]; color: string; width: number; start: number; dur: number; text?: string };
+type Shape = { id: number; tool: Tool; pts: Pt[]; color: string; width: number; start: number; dur: number; text?: string; trajectory?: TrajectorySample[] };
 
 const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "arrow", label: "Seta (passe/corte)", icon: "➜" },
@@ -32,17 +35,20 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
 const COLORS: string[] = ["#ff7a1a", "#ffd60a", "#ffffff", "#2ee6a6", "#3aa0ff", "#ff3b5c"];
 
 function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number, t: number) {
-  const p = s.pts.map((q) => ({ x: q.x * W, y: q.y * H }));
+  const anchor = s.pts[0];
+  const position = s.trajectory ? trajectoryPosition(s.trajectory, t - s.start) : undefined;
+  const p = s.pts.map((q) => ({ x: (q.x + (position && anchor ? position.x - anchor.x : 0)) * W, y: (q.y + (position && anchor ? position.y - anchor.y : 0)) * H }));
   if (!p.length) return;
   const k = W / 1000;
   const lw = s.width * k;
-  const a = Math.min(1, (t - s.start) / 0.25);
+  const a = s.trajectory ? 1 : Math.min(1, (t - s.start) / 0.25);
   ctx.save();
   ctx.globalAlpha = isFinite(a) ? Math.max(0, a) : 1;
   ctx.strokeStyle = s.color; ctx.fillStyle = s.color; ctx.lineWidth = lw;
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6 * k;
-  const a0 = p[0]!, b = p[p.length - 1]!;
+  const a0 = p[0], b = p[p.length - 1];
+  if (!a0 || !b) { ctx.restore(); return; }
   const head = (from: Pt, to: Pt) => {
     const ang = Math.atan2(to.y - from.y, to.x - from.x), L = lw * 4;
     ctx.setLineDash([]);
@@ -65,7 +71,8 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
     }
     case "pen": {
       ctx.beginPath(); p.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.stroke();
-      if (p.length > 4) head(p[p.length - 4]!, b);
+      const tail = p[p.length - 4];
+      if (tail) head(tail, b);
       break;
     }
     case "circle": case "spot": {
@@ -106,7 +113,7 @@ function Editor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>("arrow");
-  const [color, setColor] = useState<string>(COLORS[0]!);
+  const [color, setColor] = useState<string>(COLORS[0] ?? "");
   const [width, setWidth] = useState(6);
   const [dur, setDur] = useState(3);
   const [shapes, setShapes] = useState<Shape[]>([]);
@@ -116,8 +123,24 @@ function Editor() {
   const [playing, setPlaying] = useState(false);
   const [exporting, setExporting] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes); shapesRef.current = shapes;
   const draftRef = useRef(draft); draftRef.current = draft;
+
+  const finishRecording = () => {
+    const live = liveRef.current, v = videoRef.current;
+    if (!live || !v) return;
+    const elapsed = Math.max(0, v.currentTime - live.shape.start);
+    const trajectory = recordSample(live.shape.trajectory ?? [], live.point, elapsed);
+    const shape = { ...live.shape, trajectory, dur: elapsed };
+    liveRef.current = null;
+    if (elapsed > 0) { setShapes((ss) => [...ss, shape]); setSelected(shape.id); }
+    setRecording(false);
+    v.pause();
+  };
 
   // render loop
   useEffect(() => {
@@ -125,9 +148,15 @@ function Editor() {
     const loop = () => {
       const v = videoRef.current, c = canvasRef.current;
       if (v && c) {
-        const ctx = c.getContext("2d")!;
+        const ctx = c.getContext("2d");
+        if (!ctx) { raf = requestAnimationFrame(loop); return; }
         ctx.clearRect(0, 0, c.width, c.height);
         const t = v.currentTime;
+        const live = liveRef.current;
+        if (live) {
+          live.shape.trajectory = recordSample(live.shape.trajectory ?? [], live.point, Math.max(0, t - live.shape.start));
+          drawShape(ctx, live.shape, c.width, c.height, t);
+        }
         for (const s of shapesRef.current) if (t >= s.start && t <= s.start + s.dur) drawShape(ctx, s, c.width, c.height, t);
         if (draftRef.current) drawShape(ctx, { ...draftRef.current, start: -1 }, c.width, c.height, 99);
         setTime(t);
@@ -139,19 +168,31 @@ function Editor() {
   }, []);
 
   const onLoaded = () => {
-    const v = videoRef.current!, c = canvasRef.current!;
+    const v = videoRef.current, c = canvasRef.current;
+    if (!v || !c) return;
     c.width = v.videoWidth; c.height = v.videoHeight; setLength(v.duration);
   };
 
   const pos = (e: React.PointerEvent): Pt => {
-    const r = canvasRef.current!.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    const r = canvasRef.current?.getBoundingClientRect();
+    if (!r) return { x: 0, y: 0 };
+    return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) };
   };
   const down = (e: React.PointerEvent) => {
-    if (!src || exporting !== null) return;
-    videoRef.current!.pause();
+    const v = videoRef.current;
+    if (!src || !v || exporting !== null || liveRef.current) return;
     const p = pos(e);
-    const base = { id: Date.now(), tool, color, width, start: videoRef.current!.currentTime, dur };
+    const base = { id: Date.now(), tool, color, width, start: v.currentTime, dur };
+    if (liveMode) {
+      if (v.ended) { v.currentTime = 0; base.start = 0; }
+      const shape: Shape = { ...base, tool: tool === "spot" ? "spot" : "circle", pts: [p, { x: p.x + 0.035, y: p.y }], trajectory: [{ ...p, time: 0 }] };
+      liveRef.current = { shape, point: p };
+      setRecording(true); setSelected(null);
+      e.currentTarget.setPointerCapture(e.pointerId);
+      void v.play().catch(() => { liveRef.current = null; setRecording(false); });
+      return;
+    }
+    v.pause();
     if (tool === "text") {
       const text = prompt("Texto da marcação:");
       if (text) setShapes((s) => [...s, { ...base, pts: [p], text }]);
@@ -161,23 +202,29 @@ function Editor() {
     setDraft({ ...base, pts: [p, p] });
   };
   const move = (e: React.PointerEvent) => {
+    if (liveRef.current) { liveRef.current.point = pos(e); return; }
     if (!draft) return;
     const p = pos(e);
-    setDraft({ ...draft, pts: draft.tool === "pen" ? [...draft.pts, p] : [draft.pts[0]!, p] });
+    const first = draft.pts[0];
+    if (!first) return;
+    setDraft({ ...draft, pts: draft.tool === "pen" ? [...draft.pts, p] : [first, p] });
   };
   const up = () => {
+    if (liveRef.current) { finishRecording(); return; }
     if (draft) setShapes((s) => [...s, draft]);
     setDraft(null);
   };
 
-  const togglePlay = () => { const v = videoRef.current!; v.paused ? v.play() : v.pause(); };
-  const seek = (t: number) => { videoRef.current!.currentTime = t; };
+  const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
+  const seek = (t: number) => { const v = videoRef.current; if (v && !liveRef.current && exporting === null) v.currentTime = Math.max(0, Math.min(v.duration || 0, t)); };
 
   const exportVideo = async () => {
-    const v = videoRef.current!;
+    const v = videoRef.current;
+    if (!v || !v.videoWidth || liveRef.current) return;
     const out = document.createElement("canvas");
     out.width = v.videoWidth; out.height = v.videoHeight;
-    const ctx = out.getContext("2d")!;
+    const ctx = out.getContext("2d");
+    if (!ctx) return;
     const stream = out.captureStream(30);
     try {
       const ac = new AudioContext();
@@ -186,13 +233,16 @@ function Editor() {
       srcNode.connect(dest); srcNode.connect(ac.destination);
       dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     } catch { /* already connected or no audio */ }
-    const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m))!;
+    const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m));
+    if (!mime) { setExportError("Este navegador não permite exportar vídeos."); return; }
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => chunks.push(e.data);
-    setExporting(0); setSelected(null);
-    v.pause(); v.currentTime = 0;
-    await new Promise((r) => (v.onseeked = r)); v.onseeked = null;
+    setExportError(null); setExporting(0); setSelected(null);
+    v.pause();
+    if (v.currentTime !== 0) {
+      await new Promise<void>((resolve) => { v.addEventListener("seeked", () => resolve(), { once: true }); v.currentTime = 0; });
+    }
     let raf = 0;
     const frame = () => {
       ctx.drawImage(v, 0, 0, out.width, out.height);
@@ -203,16 +253,20 @@ function Editor() {
     };
     frame();
     rec.start(200);
+    const ended = new Promise<void>((resolve) => v.addEventListener("ended", () => resolve(), { once: true }));
     await v.play();
-    await new Promise((r) => (v.onended = r)); v.onended = null;
+    await ended;
     cancelAnimationFrame(raf);
+    const stopped = new Promise<void>((resolve) => rec.addEventListener("stop", () => resolve(), { once: true }));
     rec.stop();
-    await new Promise((r) => (rec.onstop = r));
+    await stopped;
     const blob = new Blob(chunks, { type: mime });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `jogada.${mime.includes("mp4") ? "mp4" : "webm"}`;
     a.click();
+    stream.getTracks().forEach((track) => track.stop());
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     setExporting(null);
   };
 
@@ -224,13 +278,13 @@ function Editor() {
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
         <h1 className="font-display text-3xl tracking-wide">PRANCHETA<span className="text-primary">PRO</span></h1>
         <div className="flex gap-2">
-          <label className="cursor-pointer rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary">
+          <label className={`rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary ${recording || exporting !== null ? "opacity-40" : "cursor-pointer"}`}>
             Abrir vídeo
-            <input type="file" accept="video/*" className="hidden" onChange={(e) => {
-              const f = e.target.files?.[0]; if (f) { setSrc(URL.createObjectURL(f)); setShapes([]); }
+            <input type="file" accept="video/*" disabled={recording || exporting !== null} className="hidden" onChange={(e) => {
+              const f = e.target.files?.[0]; if (f) { if (src) URL.revokeObjectURL(src); setSrc(URL.createObjectURL(f)); setShapes([]); setSelected(null); setTime(0); setLength(0); setExportError(null); }
             }} />
           </label>
-          <button disabled={!src || exporting !== null} onClick={exportVideo}
+          <button disabled={!src || !length || recording || exporting !== null} onClick={exportVideo}
             className="rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-40">
             {exporting !== null ? `Exportando ${Math.round(exporting * 100)}%` : "Exportar vídeo"}
           </button>
@@ -240,10 +294,14 @@ function Editor() {
       <div className="grid gap-4 p-4 lg:grid-cols-[220px_1fr_260px]">
         <aside className="space-y-4 rounded-lg bg-card p-3">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Ferramentas</p>
+          <Button variant={liveMode ? "default" : "secondary"} className="w-full" aria-pressed={liveMode} disabled={recording || exporting !== null} onClick={() => { setLiveMode(!liveMode); if (!liveMode) setTool("circle"); }}>
+            <Crosshair /> Trajeto ao vivo
+          </Button>
+          {recording && <Button variant="destructive" className="w-full" onClick={finishRecording}><Square /> Encerrar gravação</Button>}
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
             {TOOLS.map((t) => (
-              <button key={t.id} onClick={() => setTool(t.id)}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm ${tool === t.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"}`}>
+              <button key={t.id} disabled={recording || exporting !== null || (liveMode && t.id !== "circle" && t.id !== "spot")} onClick={() => setTool(t.id)}
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm disabled:opacity-40 ${tool === t.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"}`}>
                 <span className="w-5 text-center text-lg">{t.icon}</span>{t.label}
               </button>
             ))}
@@ -265,9 +323,9 @@ function Editor() {
           <div className="relative overflow-hidden rounded-lg bg-muted">
             {src ? (
               <>
-                <video ref={videoRef} src={src} onLoadedMetadata={onLoaded} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+                <video ref={videoRef} src={src} onLoadedMetadata={onLoaded} onPlay={() => setPlaying(true)} onPause={() => { setPlaying(false); if (liveRef.current) finishRecording(); }} onEnded={finishRecording}
                   className="block w-full" playsInline />
-                <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move} onPointerUp={up}
+                <canvas ref={canvasRef} aria-label="Marcações sobre o vídeo" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up}
                   className="absolute inset-0 h-full w-full cursor-crosshair touch-none" />
               </>
             ) : (
@@ -278,10 +336,12 @@ function Editor() {
               </div>
             )}
           </div>
+          {recording && <p role="status" className="text-sm font-semibold text-destructive">● Gravando trajeto · {fmt(time)}</p>}
+          {exportError && <p role="alert" className="text-sm text-destructive">{exportError}</p>}
           {src && (
             <div className="rounded-lg bg-card p-3">
               <div className="flex items-center gap-3">
-                <button onClick={togglePlay} className="w-20 rounded-md bg-secondary py-1.5 text-sm font-bold">{playing ? "Pausar" : "Play"}</button>
+                 <button disabled={recording || exporting !== null} onClick={togglePlay} className="w-20 rounded-md bg-secondary py-1.5 text-sm font-bold">{playing ? "Pausar" : "Play"}</button>
                 <button onClick={() => seek(Math.max(0, time - 1 / 30))} className="rounded-md bg-secondary px-2 py-1.5 text-sm">◀ quadro</button>
                 <button onClick={() => seek(time + 1 / 30)} className="rounded-md bg-secondary px-2 py-1.5 text-sm">quadro ▶</button>
                 <span className="ml-auto font-mono text-sm text-muted-foreground">{fmt(time)} / {fmt(length || 0)}</span>
@@ -290,7 +350,7 @@ function Editor() {
                 <input type="range" min={0} max={length || 0} step={0.01} value={time} onChange={(e) => seek(+e.target.value)}
                   className="absolute inset-x-0 top-0 w-full accent-primary" />
                 {length > 0 && shapes.map((s) => (
-                  <button key={s.id} onClick={() => { setSelected(s.id); seek(s.start); }}
+                   <button key={s.id} aria-label={`Selecionar ${s.trajectory ? "trajeto" : "marcação"} em ${fmt(s.start)}`} onClick={() => { setSelected(s.id); seek(s.start); }}
                     style={{ left: `${(s.start / length) * 100}%`, width: `${Math.max(0.5, (s.dur / length) * 100)}%`, background: s.color }}
                     className={`absolute top-6 h-3 rounded-sm opacity-80 ${selected === s.id ? "ring-2 ring-foreground" : ""}`} />
                 ))}
@@ -310,7 +370,7 @@ function Editor() {
                 <button onClick={() => { setSelected(s.id); seek(s.start); }}
                   className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${selected === s.id ? "bg-accent" : "hover:bg-secondary"}`}>
                   <span className="h-3 w-3 rounded-full" style={{ background: s.color }} />
-                  {TOOLS.find((t) => t.id === s.tool)?.label.split(" ")[0]} {s.text ? `“${s.text}”` : ""}
+                   {s.trajectory ? "Trajeto" : TOOLS.find((t) => t.id === s.tool)?.label.split(" ")[0]} {s.text ? `“${s.text}”` : ""}
                   <span className="ml-auto font-mono text-xs text-muted-foreground">{fmt(s.start)}</span>
                 </button>
               </li>
