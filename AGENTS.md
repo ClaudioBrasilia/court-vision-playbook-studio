@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Live marker motion uses normalized cursor positions timestamped by video playback time and a shared interpolation helper for preview and export, so recordings stay synchronized at any resolution.
