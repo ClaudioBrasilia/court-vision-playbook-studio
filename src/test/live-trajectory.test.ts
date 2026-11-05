@@ -4,7 +4,10 @@ import { recordSample, trajectoryPosition } from "@/lib/live-trajectory";
 describe("Live player trajectory", () => {
   it("records cursor positions at video times without manual keyframes", () => {
     const samples = recordSample(recordSample([], { x: 0.2, y: 0.4 }, 2), { x: 0.8, y: 0.6 }, 4);
-    expect(samples).toEqual([{ x: 0.2, y: 0.4, time: 2 }, { x: 0.8, y: 0.6, time: 4 }]);
+    expect(samples).toEqual([
+      { x: 0.2, y: 0.4, time: 2 },
+      { x: 0.8, y: 0.6, time: 4 },
+    ]);
     expect(trajectoryPosition(samples, 3)).toEqual({ x: 0.5, y: 0.5 });
   });
   it("preserves stationary holds and replaces same-frame cursor updates", () => {
