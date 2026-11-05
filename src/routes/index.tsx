@@ -393,3 +393,47 @@ function Editor() {
     </div>
   );
 }
+
+function ScreenCapture({ disabled, onCaptured }: { disabled: boolean; onCaptured: (url: string) => void }) {
+  const [active, setActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+
+  const start = async () => {
+    setError(null);
+    if (!navigator.mediaDevices?.getDisplayMedia) { setError("Seu navegador não suporta captura de tela. Use o Chrome ou Edge no computador."); return; }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+      const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find((m) => MediaRecorder.isTypeSupported(m));
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8_000_000 } : undefined);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setActive(false);
+        if (chunks.length) onCaptured(URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || "video/webm" })));
+      };
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => { if (rec.state !== "inactive") rec.stop(); });
+      rec.start(500);
+      recRef.current = rec;
+      setActive(true);
+    } catch {
+      setError("Captura cancelada ou não permitida.");
+    }
+  };
+
+  return (
+    <div className="relative">
+      {active ? (
+        <button onClick={() => recRef.current?.stop()} className="animate-pulse rounded-md bg-destructive px-4 py-2 text-sm font-bold text-destructive-foreground">
+          ● Parar captura
+        </button>
+      ) : (
+        <button disabled={disabled} onClick={start} title="Grave uma aba do YouTube ou qualquer janela" className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary disabled:opacity-40">
+          Capturar tela / YouTube
+        </button>
+      )}
+      {error && <p className="absolute right-0 top-full z-10 mt-1 w-64 rounded bg-card p-2 text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
