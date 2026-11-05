@@ -461,8 +461,9 @@ function Editor() {
     }
     v.pause();
     if (tool === "text") {
-      const text = prompt("Texto da marcação:");
-      if (text) recordShapes([...shapesRef.current, { ...base, pts: [p], text }]);
+      const textShape: Shape = { ...base, pts: [p], text: "Texto" };
+      recordShapes([...shapesRef.current, textShape]);
+      setSelected(textShape.id);
       return;
     }
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -536,12 +537,6 @@ function Editor() {
       );
     if (!hit) return;
     setSelected(hit.id);
-    if (hit.tool !== "text") return;
-    const text = prompt("Editar texto da marcação:", hit.text ?? "");
-    if (text !== null && text !== hit.text)
-      recordShapes(
-        shapesRef.current.map((shape) => (shape.id === hit.id ? { ...shape, text } : shape)),
-      );
   };
 
   const togglePlay = () => {
@@ -1145,6 +1140,56 @@ function Editor() {
           </ul>
           {sel && (
             <div className="space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between">
+                <p className="font-bold uppercase tracking-widest text-foreground">Propriedades</p>
+                <span>{TOOLS.find((item) => item.id === sel.tool)?.label}</span>
+              </div>
+              {sel.tool === "text" && (
+                <label className="block">
+                  Texto
+                  <textarea
+                    value={sel.text ?? ""}
+                    onChange={(event) => upd({ text: event.target.value })}
+                    rows={3}
+                    autoFocus
+                    className="mt-1 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+                    placeholder="Digite o texto da marcação"
+                  />
+                </label>
+              )}
+              <div>
+                <span className="block">Cor</span>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {COLORS.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      aria-label={`Usar cor ${item}`}
+                      onClick={() => {
+                        setColor(item);
+                        upd({ color: item });
+                      }}
+                      style={{ background: item }}
+                      className={`h-6 w-6 rounded-full border-2 ${sel.color === item ? "border-foreground" : "border-transparent"}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <label className="block">
+                Espessura: {sel.width}
+                <input
+                  type="range"
+                  min={2}
+                  max={14}
+                  value={sel.width}
+                  onChange={(event) => {
+                    const value = +event.target.value;
+                    setWidth(value);
+                    upd({ width: value });
+                  }}
+                  className="w-full accent-primary"
+                />
+              </label>
               <label className="block">
                 Início: {fmt(sel.start)}
                 <input
