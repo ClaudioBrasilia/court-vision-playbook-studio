@@ -17,6 +17,8 @@ import {
   Save,
   FolderOpen,
   X,
+  Undo2,
+  Redo2,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -217,6 +219,7 @@ function Editor() {
   const [aspect, setAspect] = useState<Aspect>("source");
   const [projectMessage, setProjectMessage] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);
+  const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
   shapesRef.current = shapes;
@@ -228,6 +231,41 @@ function Editor() {
   const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const ffmpegRef = useRef<import("@ffmpeg/ffmpeg").FFmpeg | null>(null);
   const ffmpegLoadedRef = useRef(false);
+  const pastRef = useRef<Shape[][]>([]);
+  const futureRef = useRef<Shape[][]>([]);
+
+  const recordShapes = (next: Shape[]) => {
+    pastRef.current = [...pastRef.current, shapesRef.current].slice(-50);
+    futureRef.current = [];
+    shapesRef.current = next;
+    setShapes(next);
+    setHistoryVersion((version) => version + 1);
+  };
+  const resetShapes = (next: Shape[] = []) => {
+    pastRef.current = [];
+    futureRef.current = [];
+    shapesRef.current = next;
+    setShapes(next);
+    setHistoryVersion((version) => version + 1);
+  };
+  const undo = () => {
+    const previous = pastRef.current.pop();
+    if (!previous) return;
+    futureRef.current = [...futureRef.current, shapesRef.current].slice(-50);
+    shapesRef.current = previous;
+    setShapes(previous);
+    setSelected(null);
+    setHistoryVersion((version) => version + 1);
+  };
+  const redo = () => {
+    const next = futureRef.current.pop();
+    if (!next) return;
+    pastRef.current = [...pastRef.current, shapesRef.current].slice(-50);
+    shapesRef.current = next;
+    setShapes(next);
+    setSelected(null);
+    setHistoryVersion((version) => version + 1);
+  };
 
   const finishRecording = () => {
     const live = liveRef.current,
@@ -238,7 +276,7 @@ function Editor() {
     const shape = { ...live.shape, trajectory, dur: elapsed };
     liveRef.current = null;
     if (elapsed > 0) {
-      setShapes((ss) => [...ss, shape]);
+      recordShapes([...shapesRef.current, shape]);
       setSelected(shape.id);
     }
     setRecording(false);
@@ -279,6 +317,20 @@ function Editor() {
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+        return;
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   const onLoaded = () => {
     const v = videoRef.current,
@@ -327,7 +379,7 @@ function Editor() {
     v.pause();
     if (tool === "text") {
       const text = prompt("Texto da marcação:");
-      if (text) setShapes((s) => [...s, { ...base, pts: [p], text }]);
+      if (text) recordShapes([...shapesRef.current, { ...base, pts: [p], text }]);
       return;
     }
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -349,7 +401,7 @@ function Editor() {
       finishRecording();
       return;
     }
-    if (draft) setShapes((s) => [...s, draft]);
+    if (draft) recordShapes([...shapesRef.current, draft]);
     setDraft(null);
   };
 
@@ -536,7 +588,8 @@ function Editor() {
 
   const sel = shapes.find((s) => s.id === selected);
   const upd = (patch: Partial<Shape>) =>
-    setShapes((ss) => ss.map((s) => (s.id === selected ? { ...s, ...patch } : s)));
+    selected !== null &&
+    recordShapes(shapesRef.current.map((s) => (s.id === selected ? { ...s, ...patch } : s)));
   const saveProject = () => {
     const project: ProjectFile = { version: 1, shapes, width, dur, aspect, clipStart, clipEnd };
     const link = document.createElement("a");
@@ -553,7 +606,7 @@ function Editor() {
       const project = JSON.parse(await file.text()) as ProjectFile;
       if (project.version !== 1 || !Array.isArray(project.shapes))
         throw new Error("invalid project");
-      setShapes(project.shapes);
+      resetShapes(project.shapes);
       setWidth(project.width);
       setDur(project.dur);
       setAspect(project.aspect);
@@ -589,7 +642,7 @@ function Editor() {
                 if (f) {
                   if (src) URL.revokeObjectURL(src);
                   setSrc(URL.createObjectURL(f));
-                  setShapes([]);
+                  resetShapes();
                   setSelected(null);
                   setTime(0);
                   setLength(0);
@@ -606,7 +659,7 @@ function Editor() {
             onCaptured={(url) => {
               if (src) URL.revokeObjectURL(src);
               setSrc(url);
-              setShapes([]);
+              resetShapes();
               setSelected(null);
               setTime(0);
               setLength(0);
@@ -901,14 +954,24 @@ function Editor() {
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Marcações ({shapes.length})
             </p>
-            {shapes.length > 0 && (
+            <div className="flex gap-1">
               <button
-                onClick={() => setShapes((s) => s.slice(0, -1))}
-                className="text-xs text-primary"
+                onClick={undo}
+                disabled={pastRef.current.length === 0}
+                title="Desfazer (Ctrl/Cmd+Z)"
+                className="rounded p-1 text-primary hover:bg-secondary disabled:opacity-30"
               >
-                Desfazer
+                <Undo2 className="h-4 w-4" />
               </button>
-            )}
+              <button
+                onClick={redo}
+                disabled={futureRef.current.length === 0}
+                title="Refazer (Ctrl/Cmd+Shift+Z)"
+                className="rounded p-1 text-primary hover:bg-secondary disabled:opacity-30"
+              >
+                <Redo2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <ul className="max-h-72 space-y-1 overflow-auto">
             {shapes.map((s) => (
@@ -963,7 +1026,7 @@ function Editor() {
               </label>
               <button
                 onClick={() => {
-                  setShapes((ss) => ss.filter((s) => s.id !== selected));
+                  recordShapes(shapesRef.current.filter((s) => s.id !== selected));
                   setSelected(null);
                 }}
                 className="w-full rounded-md bg-destructive py-1.5 font-semibold text-destructive-foreground"
