@@ -216,6 +216,7 @@ function Editor() {
   const [clipEnd, setClipEnd] = useState(0);
   const [aspect, setAspect] = useState<Aspect>("source");
   const [projectMessage, setProjectMessage] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
   shapesRef.current = shapes;
@@ -225,6 +226,8 @@ function Editor() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const ffmpegRef = useRef<import("@ffmpeg/ffmpeg").FFmpeg | null>(null);
+  const ffmpegLoadedRef = useRef(false);
 
   const finishRecording = () => {
     const live = liveRef.current,
@@ -365,6 +368,46 @@ function Editor() {
       v.currentTime = Math.max(0, Math.min(v.duration || 0, t));
   };
 
+  const convertToMp4 = async (input: Blob): Promise<Blob> => {
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+    const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
+    const ffmpeg = ffmpegRef.current ?? new FFmpeg();
+    ffmpegRef.current = ffmpeg;
+    if (!ffmpegLoadedRef.current) {
+      setConverting(true);
+      setProjectMessage("Carregando conversor MP4 pela primeira vez (aprox. 31 MB)…");
+      const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+      });
+      ffmpegLoadedRef.current = true;
+    }
+    setConverting(true);
+    setProjectMessage("Convertendo o vídeo para MP4 compatível…");
+    await ffmpeg.writeFile("input.webm", await fetchFile(input));
+    await ffmpeg.exec([
+      "-i",
+      "input.webm",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-movflags",
+      "+faststart",
+      "output.mp4",
+    ]);
+    const data = await ffmpeg.readFile("output.mp4");
+    if (typeof data === "string") throw new Error("FFmpeg retornou saída inválida");
+    return new Blob([new Uint8Array(data)], { type: "video/mp4" });
+  };
+
   const exportVideo = async () => {
     const v = videoRef.current;
     if (!v || !v.videoWidth || liveRef.current) return;
@@ -465,15 +508,26 @@ function Editor() {
     rec.stop();
     await stopped;
     if (!exportCancelRef.current) {
-      const blob = new Blob(chunks, { type: mime });
+      const recordedBlob = new Blob(chunks, { type: mime });
+      let blob: Blob;
+      try {
+        blob = mime.includes("mp4") ? recordedBlob : await convertToMp4(recordedBlob);
+      } catch {
+        setExportError("Não foi possível converter o vídeo para MP4 neste navegador.");
+        stream.getTracks().forEach((track) => track.stop());
+        setExporting(null);
+        setConverting(false);
+        return;
+      }
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `jogada-${aspect}.${mime.includes("mp4") ? "mp4" : "webm"}`;
+      link.download = `jogada-${aspect}.mp4`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     }
     stream.getTracks().forEach((track) => track.stop());
     setExporting(null);
+    setConverting(false);
   };
 
   const cancelExport = () => {
@@ -601,7 +655,11 @@ function Editor() {
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-[var(--shadow-glow)] transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             <Download className="h-4 w-4" />
-            {exporting !== null ? `Exportando ${Math.round(exporting * 100)}%` : "Exportar vídeo"}
+            {converting
+              ? "Convertendo MP4…"
+              : exporting !== null
+                ? `Exportando ${Math.round(exporting * 100)}%`
+                : "Exportar vídeo"}
           </button>
         </div>
       </header>
