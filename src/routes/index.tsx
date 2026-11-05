@@ -193,6 +193,45 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
   ctx.restore();
 }
 
+function shapeBounds(shape: Shape): { minX: number; minY: number; maxX: number; maxY: number } {
+  const xs = shape.pts.map((point) => point.x);
+  const ys = shape.pts.map((point) => point.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+}
+
+function hitShape(shape: Shape, point: Pt, padding = 0.035): boolean {
+  const bounds = shapeBounds(shape);
+  return (
+    point.x >= bounds.minX - padding &&
+    point.x <= bounds.maxX + padding &&
+    point.y >= bounds.minY - padding &&
+    point.y <= bounds.maxY + padding
+  );
+}
+
+function drawSelection(ctx: CanvasRenderingContext2D, shape: Shape, W: number, H: number) {
+  const bounds = shapeBounds(shape);
+  const x = bounds.minX * W;
+  const y = bounds.minY * H;
+  const width = Math.max(0.04 * W, (bounds.maxX - bounds.minX) * W);
+  const height = Math.max(0.04 * H, (bounds.maxY - bounds.minY) * H);
+  const handle = Math.max(8, Math.min(14, W / 80));
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,.9)";
+  ctx.setLineDash([6, 4]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x - 4, y - 4, width + 8, height + 8);
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#ff7a1a";
+  ctx.fillRect(x + width - handle / 2, y + height - handle / 2, handle, handle);
+  ctx.restore();
+}
+
 const fmt = (t: number) =>
   `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}.${Math.floor((t % 1) * 10)}`;
 
@@ -223,6 +262,8 @@ function Editor() {
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
   shapesRef.current = shapes;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const exportCancelRef = useRef(false);
@@ -233,6 +274,12 @@ function Editor() {
   const ffmpegLoadedRef = useRef(false);
   const pastRef = useRef<Shape[][]>([]);
   const futureRef = useRef<Shape[][]>([]);
+  const interactionRef = useRef<{
+    mode: "move" | "resize";
+    id: number;
+    origin: Pt;
+    before: Shape[];
+  } | null>(null);
 
   const recordShapes = (next: Shape[]) => {
     pastRef.current = [...pastRef.current, shapesRef.current].slice(-50);
@@ -308,6 +355,13 @@ function Editor() {
         }
         for (const s of shapesRef.current)
           if (t >= s.start && t <= s.start + s.dur) drawShape(ctx, s, c.width, c.height, t);
+        const selectedShape = shapesRef.current.find((shape) => shape.id === selectedRef.current);
+        if (
+          selectedShape &&
+          t >= selectedShape.start &&
+          t <= selectedShape.start + selectedShape.dur
+        )
+          drawSelection(ctx, selectedShape, c.width, c.height);
         if (draftRef.current)
           drawShape(ctx, { ...draftRef.current, start: -1 }, c.width, c.height, 99);
         setTime(t);
@@ -342,7 +396,7 @@ function Editor() {
     setClipEnd(v.duration);
   };
 
-  const pos = (e: React.PointerEvent): Pt => {
+  const pos = (e: { clientX: number; clientY: number }): Pt => {
     const r = canvasRef.current?.getBoundingClientRect();
     if (!r) return { x: 0, y: 0 };
     return {
@@ -354,6 +408,35 @@ function Editor() {
     const v = videoRef.current;
     if (!src || !v || exporting !== null || liveRef.current) return;
     const p = pos(e);
+
+    const hit = [...shapesRef.current]
+      .reverse()
+      .find(
+        (shape) =>
+          v.currentTime >= shape.start &&
+          v.currentTime <= shape.start + shape.dur &&
+          hitShape(shape, p),
+      );
+    if (hit) {
+      const bounds = shapeBounds(hit);
+      const nearHandle =
+        Math.abs(p.x - bounds.maxX) <= 0.06 &&
+        Math.abs(p.y - bounds.maxY) <= 0.06 &&
+        hit.pts.length > 1;
+      v.pause();
+      setSelected(hit.id);
+      interactionRef.current = {
+        mode: nearHandle ? "resize" : "move",
+        id: hit.id,
+        origin: p,
+        before: shapesRef.current.map((shape) => ({
+          ...shape,
+          pts: shape.pts.map((point) => ({ ...point })),
+        })),
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     const base = { id: Date.now(), tool, color, width, start: v.currentTime, dur };
     if (liveMode) {
       if (v.ended) {
@@ -390,6 +473,31 @@ function Editor() {
       liveRef.current.point = pos(e);
       return;
     }
+    const interaction = interactionRef.current;
+    if (interaction) {
+      const point = pos(e);
+      const dx = point.x - interaction.origin.x;
+      const dy = point.y - interaction.origin.y;
+      const next = interaction.before.map((shape) => {
+        if (shape.id !== interaction.id) return shape;
+        if (interaction.mode === "resize") {
+          const pts = shape.pts.map((item, index) =>
+            index === shape.pts.length - 1 ? { x: point.x, y: point.y } : { ...item },
+          );
+          return { ...shape, pts };
+        }
+        return {
+          ...shape,
+          pts: shape.pts.map((item) => ({
+            x: Math.max(0, Math.min(1, item.x + dx)),
+            y: Math.max(0, Math.min(1, item.y + dy)),
+          })),
+        };
+      });
+      shapesRef.current = next;
+      setShapes(next);
+      return;
+    }
     if (!draft) return;
     const p = pos(e);
     const first = draft.pts[0];
@@ -401,8 +509,39 @@ function Editor() {
       finishRecording();
       return;
     }
+    const interaction = interactionRef.current;
+    if (interaction) {
+      if (JSON.stringify(interaction.before) !== JSON.stringify(shapesRef.current)) {
+        pastRef.current = [...pastRef.current, interaction.before].slice(-50);
+        futureRef.current = [];
+        setHistoryVersion((version) => version + 1);
+      }
+      interactionRef.current = null;
+      return;
+    }
     if (draft) recordShapes([...shapesRef.current, draft]);
     setDraft(null);
+  };
+  const doubleClick = (e: React.MouseEvent) => {
+    const v = videoRef.current;
+    if (!v || exporting !== null) return;
+    const point = pos(e);
+    const hit = [...shapesRef.current]
+      .reverse()
+      .find(
+        (shape) =>
+          v.currentTime >= shape.start &&
+          v.currentTime <= shape.start + shape.dur &&
+          hitShape(shape, point),
+      );
+    if (!hit) return;
+    setSelected(hit.id);
+    if (hit.tool !== "text") return;
+    const text = prompt("Editar texto da marcação:", hit.text ?? "");
+    if (text !== null && text !== hit.text)
+      recordShapes(
+        shapesRef.current.map((shape) => (shape.id === hit.id ? { ...shape, text } : shape)),
+      );
   };
 
   const togglePlay = () => {
@@ -769,7 +908,15 @@ function Editor() {
             {COLORS.map((c) => (
               <button
                 key={c}
-                onClick={() => setColor(c)}
+                onClick={() => {
+                  setColor(c);
+                  if (selected !== null)
+                    recordShapes(
+                      shapesRef.current.map((shape) =>
+                        shape.id === selected ? { ...shape, color: c } : shape,
+                      ),
+                    );
+                }}
                 aria-label={c}
                 style={{ background: c }}
                 className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-foreground" : "border-transparent"}`}
@@ -840,6 +987,7 @@ function Editor() {
                   onPointerUp={up}
                   onPointerCancel={up}
                   onLostPointerCapture={up}
+                  onDoubleClick={doubleClick}
                   className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
                 />
               </>
