@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Crosshair, Square } from "lucide-react";
+import { Crosshair, Square, MoveUpRight, Spline, Minus, Circle, Sun, RectangleHorizontal, PenLine, Type, Upload, MonitorUp, Download, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { recordSample, trajectoryPosition, type TrajectorySample } from "@/lib/live-trajectory";
 
@@ -22,15 +22,15 @@ type Tool = "arrow" | "dashed" | "line" | "circle" | "zone" | "pen" | "text" | "
 type Pt = { x: number; y: number };
 type Shape = { id: number; tool: Tool; pts: Pt[]; color: string; width: number; start: number; dur: number; text?: string; trajectory?: TrajectorySample[] };
 
-const TOOLS: { id: Tool; label: string; icon: string }[] = [
-  { id: "arrow", label: "Seta (passe/corte)", icon: "➜" },
-  { id: "dashed", label: "Seta tracejada (passe)", icon: "⇢" },
-  { id: "line", label: "Linha / bloqueio", icon: "┤" },
-  { id: "circle", label: "Círculo no jogador", icon: "◯" },
-  { id: "spot", label: "Holofote", icon: "◉" },
-  { id: "zone", label: "Zona", icon: "▭" },
-  { id: "pen", label: "Livre", icon: "✎" },
-  { id: "text", label: "Texto", icon: "T" },
+const TOOLS: { id: Tool; label: string; icon: LucideIcon }[] = [
+  { id: "arrow", label: "Seta (passe/corte)", icon: MoveUpRight },
+  { id: "dashed", label: "Seta tracejada (passe)", icon: Spline },
+  { id: "line", label: "Linha / bloqueio", icon: Minus },
+  { id: "circle", label: "Círculo no jogador", icon: Circle },
+  { id: "spot", label: "Holofote", icon: Sun },
+  { id: "zone", label: "Zona", icon: RectangleHorizontal },
+  { id: "pen", label: "Livre", icon: PenLine },
+  { id: "text", label: "Texto", icon: Type },
 ];
 const COLORS: string[] = ["#ff7a1a", "#ffd60a", "#ffffff", "#2ee6a6", "#3aa0ff", "#ff3b5c"];
 
@@ -278,22 +278,23 @@ function Editor() {
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
         <h1 className="font-display text-3xl tracking-wide">PRANCHETA<span className="text-primary">PRO</span></h1>
         <div className="flex gap-2">
-          <label className={`rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary ${recording || exporting !== null ? "opacity-40" : "cursor-pointer"}`}>
-            Abrir vídeo
+          <label className={`inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary ${recording || exporting !== null ? "opacity-40" : "cursor-pointer"}`}>
+            <Upload className="h-4 w-4" /> Abrir vídeo
             <input type="file" accept="video/*" disabled={recording || exporting !== null} className="hidden" onChange={(e) => {
               const f = e.target.files?.[0]; if (f) { if (src) URL.revokeObjectURL(src); setSrc(URL.createObjectURL(f)); setShapes([]); setSelected(null); setTime(0); setLength(0); setExportError(null); }
             }} />
           </label>
           <ScreenCapture disabled={recording || exporting !== null} onCaptured={(url) => { if (src) URL.revokeObjectURL(src); setSrc(url); setShapes([]); setSelected(null); setTime(0); setLength(0); setExportError(null); }} />
           <button disabled={!src || !length || recording || exporting !== null} onClick={exportVideo}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-40">
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-[var(--shadow-glow)] transition-opacity hover:opacity-90 disabled:opacity-40">
+            <Download className="h-4 w-4" />
             {exporting !== null ? `Exportando ${Math.round(exporting * 100)}%` : "Exportar vídeo"}
           </button>
         </div>
       </header>
 
       <div className="grid gap-4 p-4 lg:grid-cols-[220px_1fr_260px]">
-        <aside className="space-y-4 rounded-lg bg-card p-3">
+        <aside className="space-y-4 rounded-xl border border-border bg-card p-3">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Ferramentas</p>
           <Button variant={liveMode ? "default" : "secondary"} className="w-full" aria-pressed={liveMode} disabled={recording || exporting !== null} onClick={() => { setLiveMode(!liveMode); if (!liveMode) setTool("circle"); }}>
             <Crosshair /> Trajeto ao vivo
@@ -302,8 +303,8 @@ function Editor() {
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
             {TOOLS.map((t) => (
               <button key={t.id} disabled={recording || exporting !== null || (liveMode && t.id !== "circle" && t.id !== "spot")} onClick={() => setTool(t.id)}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm disabled:opacity-40 ${tool === t.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"}`}>
-                <span className="w-5 text-center text-lg">{t.icon}</span>{t.label}
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:opacity-40 ${tool === t.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"}`}>
+                <t.icon className="h-4 w-4 shrink-0" />{t.label}
               </button>
             ))}
           </div>
@@ -340,7 +341,7 @@ function Editor() {
           {recording && <p role="status" className="text-sm font-semibold text-destructive">● Gravando trajeto · {fmt(time)}</p>}
           {exportError && <p role="alert" className="text-sm text-destructive">{exportError}</p>}
           {src && (
-            <div className="rounded-lg bg-card p-3">
+            <div className="rounded-xl border border-border bg-card p-3">
               <div className="flex items-center gap-3">
                  <button disabled={recording || exporting !== null} onClick={togglePlay} className="w-20 rounded-md bg-secondary py-1.5 text-sm font-bold">{playing ? "Pausar" : "Play"}</button>
                 <button onClick={() => seek(Math.max(0, time - 1 / 30))} className="rounded-md bg-secondary px-2 py-1.5 text-sm">◀ quadro</button>
@@ -360,7 +361,7 @@ function Editor() {
           )}
         </main>
 
-        <aside className="space-y-3 rounded-lg bg-card p-3">
+        <aside className="space-y-3 rounded-xl border border-border bg-card p-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Marcações ({shapes.length})</p>
             {shapes.length > 0 && <button onClick={() => setShapes((s) => s.slice(0, -1))} className="text-xs text-primary">Desfazer</button>}
@@ -429,8 +430,8 @@ function ScreenCapture({ disabled, onCaptured }: { disabled: boolean; onCaptured
           ● Parar captura
         </button>
       ) : (
-        <button disabled={disabled} onClick={start} title="Grave uma aba do YouTube ou qualquer janela" className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary disabled:opacity-40">
-          Capturar tela / YouTube
+        <button disabled={disabled} onClick={start} title="Grave uma aba do YouTube ou qualquer janela" className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary disabled:opacity-40">
+          <MonitorUp className="h-4 w-4" /> Capturar tela / YouTube
         </button>
       )}
       {error && <p className="absolute right-0 top-full z-10 mt-1 w-64 rounded bg-card p-2 text-xs text-destructive">{error}</p>}
