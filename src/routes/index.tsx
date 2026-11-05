@@ -284,6 +284,7 @@ function Editor() {
               const f = e.target.files?.[0]; if (f) { if (src) URL.revokeObjectURL(src); setSrc(URL.createObjectURL(f)); setShapes([]); setSelected(null); setTime(0); setLength(0); setExportError(null); }
             }} />
           </label>
+          <ScreenCapture disabled={recording || exporting !== null} onCaptured={(url) => { if (src) URL.revokeObjectURL(src); setSrc(url); setShapes([]); setSelected(null); setTime(0); setLength(0); setExportError(null); }} />
           <button disabled={!src || !length || recording || exporting !== null} onClick={exportVideo}
             className="rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-40">
             {exporting !== null ? `Exportando ${Math.round(exporting * 100)}%` : "Exportar vídeo"}
