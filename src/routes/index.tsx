@@ -242,7 +242,7 @@ function Editor() {
   const [tool, setTool] = useState<Tool>("arrow");
   const [color, setColor] = useState<string>(COLORS[0] ?? "");
   const [width, setWidth] = useState(6);
-  const [dur, setDur] = useState(3);
+  const [dur, setDur] = useState(2);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [draft, setDraft] = useState<Shape | null>(null);
   const [time, setTime] = useState(0);
@@ -258,6 +258,9 @@ function Editor() {
   const [aspect, setAspect] = useState<Aspect>("source");
   const [projectMessage, setProjectMessage] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);
+  const [screenCapture, setScreenCapture] = useState(false);
+  const [captureZoom, setCaptureZoom] = useState(1.28);
+  const [captureOffset, setCaptureOffset] = useState(0);
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -661,6 +664,13 @@ function Editor() {
         sh = v.videoWidth / destinationRatio;
         sy = (v.videoHeight - sh) / 2;
       }
+      if (screenCapture && captureZoom > 1) {
+        const originalWidth = sw;
+        sw /= captureZoom;
+        sx += (originalWidth - sw) / 2;
+        sx -= (captureOffset / 100) * originalWidth;
+        sx = Math.max(0, Math.min(v.videoWidth - sw, sx));
+      }
       ctx.drawImage(v, sx, sy, sw, sh, 0, 0, out.width, out.height);
       const t = v.currentTime;
       for (const shape of shapesRef.current)
@@ -776,6 +786,9 @@ function Editor() {
                 if (f) {
                   if (src) URL.revokeObjectURL(src);
                   setSrc(URL.createObjectURL(f));
+                  setScreenCapture(false);
+                  setCaptureZoom(1);
+                  setCaptureOffset(0);
                   resetShapes();
                   setSelected(null);
                   setTime(0);
@@ -793,6 +806,9 @@ function Editor() {
             onCaptured={(url) => {
               if (src) URL.revokeObjectURL(src);
               setSrc(url);
+              setScreenCapture(true);
+              setCaptureZoom(1.28);
+              setCaptureOffset(0);
               resetShapes();
               setSelected(null);
               setTime(0);
@@ -941,6 +957,40 @@ function Editor() {
               className="w-full accent-primary"
             />
           </label>
+          {screenCapture && (
+            <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-2 text-xs">
+              <p className="font-semibold text-foreground">Cortar laterais da captura</p>
+              <p className="text-muted-foreground">
+                A captura veio da tela inteira. Aumente o zoom para esconder thumbnails e ajuste o
+                centro.
+              </p>
+              <label className="block">
+                Zoom: {captureZoom.toFixed(2)}x
+                <input
+                  type="range"
+                  min={1}
+                  max={2}
+                  step={0.01}
+                  value={captureZoom}
+                  onChange={(event) => setCaptureZoom(+event.target.value)}
+                  className="w-full accent-primary"
+                />
+              </label>
+              <label className="block">
+                Enquadramento horizontal:{" "}
+                {captureOffset > 0 ? "direita" : captureOffset < 0 ? "esquerda" : "centro"}
+                <input
+                  type="range"
+                  min={-18}
+                  max={18}
+                  step={1}
+                  value={captureOffset}
+                  onChange={(event) => setCaptureOffset(+event.target.value)}
+                  className="w-full accent-primary"
+                />
+              </label>
+            </div>
+          )}
           <label className="block text-xs text-muted-foreground">
             Formato de exportação
             <select
@@ -971,6 +1021,14 @@ function Editor() {
                     if (liveRef.current) finishRecording();
                   }}
                   onEnded={finishRecording}
+                  style={
+                    screenCapture
+                      ? {
+                          transform: `translateX(${captureOffset}%) scale(${captureZoom})`,
+                          transformOrigin: "center center",
+                        }
+                      : undefined
+                  }
                   className="block w-full"
                   playsInline
                 />
@@ -983,6 +1041,14 @@ function Editor() {
                   onPointerCancel={up}
                   onLostPointerCapture={up}
                   onDoubleClick={doubleClick}
+                  style={
+                    screenCapture
+                      ? {
+                          transform: `translateX(${captureOffset}%) scale(${captureZoom})`,
+                          transformOrigin: "center center",
+                        }
+                      : undefined
+                  }
                   className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
                 />
               </>
@@ -1206,7 +1272,7 @@ function Editor() {
                 />
               </label>
               <label className="block">
-                Duração: {sel.dur}s
+                Duração na tela: {sel.dur}s — desaparece em {fmt(sel.start + sel.dur)}
                 <input
                   type="range"
                   min={0.5}
@@ -1229,8 +1295,8 @@ function Editor() {
             </div>
           )}
           <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-            Dica: o vídeo pausa sozinho ao desenhar. Cada marcação aparece pelo tempo definido a
-            partir do momento em que foi feita.
+            Dica: o vídeo pausa ao desenhar. Depois, cada marcação aparece no início configurado e
+            desaparece quando chega ao fim da duração — por padrão, após 2 segundos.
           </p>
         </aside>
       </div>
@@ -1257,8 +1323,9 @@ function ScreenCapture({
     }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30 },
+        video: { frameRate: 30, displaySurface: "browser" },
         audio: true,
+        preferCurrentTab: true,
       });
       const mime = [
         "video/webm;codecs=vp9",
@@ -1304,10 +1371,10 @@ function ScreenCapture({
         <button
           disabled={disabled}
           onClick={start}
-          title="Grave uma aba do YouTube ou qualquer janela"
+          title="Na janela seguinte, escolha Aba do navegador para evitar capturar a tela inteira"
           className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary disabled:opacity-40"
         >
-          <MonitorUp className="h-4 w-4" /> Capturar tela / YouTube
+          <MonitorUp className="h-4 w-4" /> Capturar aba / YouTube
         </button>
       )}
       {error && (
