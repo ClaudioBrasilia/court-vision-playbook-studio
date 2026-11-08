@@ -261,6 +261,7 @@ function Editor() {
   const [screenCapture, setScreenCapture] = useState(false);
   const [captureZoom, setCaptureZoom] = useState(1.28);
   const [captureOffset, setCaptureOffset] = useState(0);
+  const [autoPlayAfterDraw, setAutoPlayAfterDraw] = useState(true);
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -467,6 +468,7 @@ function Editor() {
       const textShape: Shape = { ...base, pts: [p], text: "Texto" };
       recordShapes([...shapesRef.current, textShape]);
       setSelected(textShape.id);
+      if (autoPlayAfterDraw) void v.play();
       return;
     }
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -523,7 +525,10 @@ function Editor() {
       interactionRef.current = null;
       return;
     }
-    if (draft) recordShapes([...shapesRef.current, draft]);
+    if (draft) {
+      recordShapes([...shapesRef.current, draft]);
+      if (autoPlayAfterDraw) void videoRef.current?.play();
+    }
     setDraft(null);
   };
   const doubleClick = (e: React.MouseEvent) => {
@@ -1100,6 +1105,19 @@ function Editor() {
                   {fmt(time)} / {fmt(length || 0)}
                 </span>
               </div>
+              <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={autoPlayAfterDraw}
+                  onChange={(event) => setAutoPlayAfterDraw(event.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                Continuar vídeo automaticamente após desenhar
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ativo: desenhe a seta e o vídeo volta a rodar sozinho. Desative para revisar cada
+                desenho parado.
+              </p>
               <div className="relative mt-3 h-10">
                 <input
                   type="range"
