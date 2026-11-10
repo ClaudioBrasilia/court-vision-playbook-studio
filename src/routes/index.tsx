@@ -67,6 +67,7 @@ type ProjectFile = {
   aspect: Aspect;
   clipStart: number;
   clipEnd: number;
+  tags?: string[];
 };
 
 const TOOLS: { id: Tool; label: string; icon: LucideIcon }[] = [
@@ -85,6 +86,14 @@ const ASPECTS: { id: Aspect; label: string; ratio: number | null }[] = [
   { id: "vertical", label: "9:16 · Reels", ratio: 9 / 16 },
   { id: "square", label: "1:1 · Feed", ratio: 1 },
   { id: "landscape", label: "16:9 · YouTube", ratio: 16 / 9 },
+];
+const BASKETBALL_TAGS = [
+  "Pick and roll",
+  "Transição",
+  "Arremesso",
+  "Turnover",
+  "Rebote",
+  "Boa defesa",
 ];
 
 function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number, t: number) {
@@ -264,6 +273,8 @@ function Editor() {
   const [captureOffset, setCaptureOffset] = useState(0);
   const [autoPlayAfterDraw, setAutoPlayAfterDraw] = useState(true);
   const [step, setStep] = useState<EditorStep>("open");
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [tags, setTags] = useState<string[]>([]);
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -564,6 +575,14 @@ function Editor() {
     if (v && !liveRef.current && exporting === null)
       v.currentTime = Math.max(0, Math.min(v.duration || 0, t));
   };
+  const markCurrentMoment = () => {
+    const v = videoRef.current;
+    if (!v || !src || exporting !== null) return;
+    v.pause();
+    setTool("arrow");
+    setSelected(null);
+    setProjectMessage("Momento marcado. Desenhe a seta sobre a jogada.");
+  };
 
   const convertToMp4 = async (input: Blob): Promise<Blob> => {
     const { FFmpeg } = await import("@ffmpeg/ffmpeg");
@@ -743,7 +762,16 @@ function Editor() {
     selected !== null &&
     recordShapes(shapesRef.current.map((s) => (s.id === selected ? { ...s, ...patch } : s)));
   const saveProject = () => {
-    const project: ProjectFile = { version: 1, shapes, width, dur, aspect, clipStart, clipEnd };
+    const project: ProjectFile = {
+      version: 1,
+      shapes,
+      width,
+      dur,
+      aspect,
+      clipStart,
+      clipEnd,
+      tags,
+    };
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
       new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
@@ -764,6 +792,7 @@ function Editor() {
       setAspect(project.aspect);
       setClipStart(project.clipStart);
       setClipEnd(project.clipEnd);
+      setTags(Array.isArray(project.tags) ? project.tags : []);
       setProjectMessage("Projeto carregado. Abra o vídeo original para visualizar as marcações.");
     } catch {
       setProjectMessage("Não foi possível abrir este projeto.");
@@ -805,6 +834,7 @@ function Editor() {
                   setCaptureZoom(1);
                   setCaptureOffset(0);
                   resetShapes();
+                  setTags([]);
                   setSelected(null);
                   setTime(0);
                   setLength(0);
@@ -826,6 +856,7 @@ function Editor() {
               setCaptureZoom(1.28);
               setCaptureOffset(0);
               resetShapes();
+              setTags([]);
               setSelected(null);
               setTime(0);
               setLength(0);
@@ -944,6 +975,14 @@ function Editor() {
             >
               <Crosshair /> Trajeto ao vivo
             </Button>
+            <button
+              type="button"
+              onClick={markCurrentMoment}
+              disabled={!src || recording || exporting !== null}
+              className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground disabled:opacity-40"
+            >
+              Marcar este momento
+            </button>
             {recording && (
               <Button variant="destructive" className="w-full" onClick={finishRecording}>
                 <Square /> Encerrar gravação
@@ -1009,6 +1048,30 @@ function Editor() {
                 className="w-full accent-primary"
               />
             </label>
+            <div className="space-y-2 rounded-lg border border-border bg-secondary/40 p-2">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Tags da jogada
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {BASKETBALL_TAGS.map((tag) => {
+                  const active = tags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setTags((current) =>
+                          active ? current.filter((item) => item !== tag) : [...current, tag],
+                        )
+                      }
+                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent"}`}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {screenCapture && (
               <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-2 text-xs">
                 <p className="font-semibold text-foreground">Cortar laterais da captura</p>
@@ -1053,6 +1116,7 @@ function Editor() {
                 <video
                   ref={videoRef}
                   src={src}
+                  playbackRate={playbackRate}
                   onLoadedMetadata={onLoaded}
                   onPlay={() => setPlaying(true)}
                   onPause={() => {
@@ -1135,6 +1199,26 @@ function Editor() {
                 >
                   quadro ▶
                 </button>
+                <button
+                  type="button"
+                  onClick={markCurrentMoment}
+                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground"
+                >
+                  Marcar momento
+                </button>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Velocidade
+                  <select
+                    value={playbackRate}
+                    onChange={(event) => setPlaybackRate(Number(event.target.value))}
+                    className="rounded-md border border-input bg-background px-1.5 py-1 text-xs text-foreground"
+                  >
+                    <option value={0.25}>0,25x</option>
+                    <option value={0.5}>0,5x</option>
+                    <option value={0.75}>0,75x</option>
+                    <option value={1}>1x</option>
+                  </select>
+                </label>
                 <span className="ml-auto font-mono text-sm text-muted-foreground">
                   {fmt(time)} / {fmt(length || 0)}
                 </span>
@@ -1348,6 +1432,18 @@ function Editor() {
                 </button>
               </div>
             </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-primary/15 px-2 py-1 text-xs font-semibold text-primary"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
             <ul className="max-h-72 space-y-1 overflow-auto">
               {shapes.map((s) => (
                 <li key={s.id}>

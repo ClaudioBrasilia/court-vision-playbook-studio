@@ -20,6 +20,14 @@
 - [ ] A etapa de exportação deve concentrar início/fim do trecho, formato Original/9:16/1:1/16:9, exportação MP4, progresso e cancelamento.
 - [ ] A exportação deve continuar usando o recorte e as marcações definidos no editor, sem exigir que o usuário procure configurações em painéis diferentes.
 
+## Recursos esportivos iniciais
+
+- [ ] O usuário deve poder reproduzir o vídeo em 0,25x, 0,5x, 0,75x e 1x.
+- [ ] O usuário deve poder avançar e voltar um quadro para encontrar o instante exato da jogada.
+- [ ] O botão “Marcar este momento” deve pausar o vídeo, selecionar a seta e orientar o usuário a desenhar.
+- [ ] O usuário deve poder aplicar tags de basquete como Pick and roll, Transição, Arremesso, Turnover, Rebote e Boa defesa.
+- [ ] As tags devem aparecer na revisão e ser preservadas ao salvar e abrir um projeto JSON.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.
