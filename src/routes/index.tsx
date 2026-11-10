@@ -58,6 +58,7 @@ type Shape = {
   trajectory?: TrajectorySample[];
 };
 type Aspect = "source" | "vertical" | "square" | "landscape";
+type EditorStep = "open" | "mark" | "review" | "export";
 type ProjectFile = {
   version: 1;
   shapes: Shape[];
@@ -262,6 +263,7 @@ function Editor() {
   const [captureZoom, setCaptureZoom] = useState(1.28);
   const [captureOffset, setCaptureOffset] = useState(0);
   const [autoPlayAfterDraw, setAutoPlayAfterDraw] = useState(true);
+  const [step, setStep] = useState<EditorStep>("open");
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -398,6 +400,7 @@ function Editor() {
     c.height = v.videoHeight;
     setLength(v.duration);
     setClipEnd(v.duration);
+    setStep("mark");
   };
 
   const pos = (e: { clientX: number; clientY: number }): Pt => {
@@ -769,6 +772,13 @@ function Editor() {
   const resetProjectMessage = () => {
     if (projectMessage) setProjectMessage(null);
   };
+  const canChangeStep = recording === false && exporting === null;
+  const goToStep = (next: EditorStep) => {
+    if (!canChangeStep) return;
+    if (next !== "open" && (!src || !length)) return;
+    setStep(next);
+    if (next === "review" || next === "export") videoRef.current?.pause();
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body">
@@ -800,6 +810,7 @@ function Editor() {
                   setLength(0);
                   setClipStart(0);
                   setClipEnd(0);
+                  setStep("open");
                   setExportError(null);
                   resetProjectMessage();
                 }
@@ -820,6 +831,7 @@ function Editor() {
               setLength(0);
               setClipStart(0);
               setClipEnd(0);
+              setStep("open");
               setExportError(null);
               resetProjectMessage();
             }}
@@ -860,7 +872,7 @@ function Editor() {
           <button
             disabled={!src || !length || recording || exporting !== null}
             onClick={() => void exportVideo()}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-[var(--shadow-glow)] transition-opacity hover:opacity-90 disabled:opacity-40"
+            className={`${step === "export" ? "inline-flex" : "hidden"} items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-[var(--shadow-glow)] transition-opacity hover:opacity-90 disabled:opacity-40`}
           >
             <Download className="h-4 w-4" />
             {converting
@@ -871,6 +883,38 @@ function Editor() {
           </button>
         </div>
       </header>
+      <nav
+        aria-label="Etapas do editor"
+        className="border-b border-border bg-card px-4 py-3 md:px-6"
+      >
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2">
+          {(
+            [
+              ["open", "1", "Abrir vídeo"],
+              ["mark", "2", "Marcar jogada"],
+              ["review", "3", "Revisar"],
+              ["export", "4", "Exportar"],
+            ] as [EditorStep, string, string][]
+          ).map(([id, number, label], index) => (
+            <div key={id} className="flex flex-1 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => goToStep(id)}
+                disabled={id !== "open" && (!src || !length)}
+                className={`flex items-center gap-2 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${step === id ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <span
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs ${step === id ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+                >
+                  {number}
+                </span>
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+              {index < 3 && <span className="mx-1 h-px flex-1 bg-border" />}
+            </div>
+          ))}
+        </div>
+      </nav>
       {projectMessage && (
         <p
           role="status"
@@ -880,137 +924,127 @@ function Editor() {
         </p>
       )}
 
-      <div className="grid gap-4 p-4 lg:grid-cols-[220px_1fr_260px]">
-        <aside className="space-y-4 rounded-xl border border-border bg-card p-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Ferramentas
-          </p>
-          <Button
-            variant={liveMode ? "default" : "secondary"}
-            className="w-full"
-            aria-pressed={liveMode}
-            disabled={recording || exporting !== null}
-            onClick={() => {
-              setLiveMode(!liveMode);
-              if (!liveMode) setTool("circle");
-            }}
-          >
-            <Crosshair /> Trajeto ao vivo
-          </Button>
-          {recording && (
-            <Button variant="destructive" className="w-full" onClick={finishRecording}>
-              <Square /> Encerrar gravação
-            </Button>
-          )}
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
-            {TOOLS.map((t) => (
-              <button
-                key={t.id}
-                disabled={
-                  recording ||
-                  exporting !== null ||
-                  (liveMode && t.id !== "circle" && t.id !== "spot")
-                }
-                onClick={() => setTool(t.id)}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:opacity-40 ${tool === t.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"}`}
-              >
-                <t.icon className="h-4 w-4 shrink-0" />
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Cor</p>
-          <div className="flex flex-wrap gap-2">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => {
-                  setColor(c);
-                  if (selected !== null)
-                    recordShapes(
-                      shapesRef.current.map((shape) =>
-                        shape.id === selected ? { ...shape, color: c } : shape,
-                      ),
-                    );
-                }}
-                aria-label={c}
-                style={{ background: c }}
-                className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-foreground" : "border-transparent"}`}
-              />
-            ))}
-          </div>
-          <label className="block text-xs text-muted-foreground">
-            Espessura: {width}
-            <input
-              type="range"
-              min={2}
-              max={14}
-              value={width}
-              onChange={(e) => setWidth(+e.target.value)}
-              className="w-full accent-primary"
-            />
-          </label>
-          <label className="block text-xs text-muted-foreground">
-            Duração na tela: {dur}s
-            <input
-              type="range"
-              min={0.5}
-              max={15}
-              step={0.5}
-              value={dur}
-              onChange={(e) => setDur(+e.target.value)}
-              className="w-full accent-primary"
-            />
-          </label>
-          {screenCapture && (
-            <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-2 text-xs">
-              <p className="font-semibold text-foreground">Cortar laterais da captura</p>
-              <p className="text-muted-foreground">
-                A captura veio da tela inteira. Aumente o zoom para esconder thumbnails e ajuste o
-                centro.
-              </p>
-              <label className="block">
-                Zoom: {captureZoom.toFixed(2)}x
-                <input
-                  type="range"
-                  min={1}
-                  max={2}
-                  step={0.01}
-                  value={captureZoom}
-                  onChange={(event) => setCaptureZoom(+event.target.value)}
-                  className="w-full accent-primary"
-                />
-              </label>
-              <label className="block">
-                Enquadramento horizontal:{" "}
-                {captureOffset > 0 ? "direita" : captureOffset < 0 ? "esquerda" : "centro"}
-                <input
-                  type="range"
-                  min={-18}
-                  max={18}
-                  step={1}
-                  value={captureOffset}
-                  onChange={(event) => setCaptureOffset(+event.target.value)}
-                  className="w-full accent-primary"
-                />
-              </label>
-            </div>
-          )}
-          <label className="block text-xs text-muted-foreground">
-            Formato de exportação
-            <select
-              value={aspect}
-              onChange={(e) => setAspect(e.target.value as Aspect)}
-              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
+      <div
+        className={`grid gap-4 p-4 ${step === "mark" ? "lg:grid-cols-[220px_1fr_260px]" : "lg:grid-cols-[1fr_300px]"}`}
+      >
+        {step === "mark" && (
+          <aside className="space-y-4 rounded-xl border border-border bg-card p-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Ferramentas
+            </p>
+            <Button
+              variant={liveMode ? "default" : "secondary"}
+              className="w-full"
+              aria-pressed={liveMode}
+              disabled={recording || exporting !== null}
+              onClick={() => {
+                setLiveMode(!liveMode);
+                if (!liveMode) setTool("circle");
+              }}
             >
-              {ASPECTS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
+              <Crosshair /> Trajeto ao vivo
+            </Button>
+            {recording && (
+              <Button variant="destructive" className="w-full" onClick={finishRecording}>
+                <Square /> Encerrar gravação
+              </Button>
+            )}
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+              {TOOLS.map((t) => (
+                <button
+                  key={t.id}
+                  disabled={
+                    recording ||
+                    exporting !== null ||
+                    (liveMode && t.id !== "circle" && t.id !== "spot")
+                  }
+                  onClick={() => setTool(t.id)}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:opacity-40 ${tool === t.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"}`}
+                >
+                  <t.icon className="h-4 w-4 shrink-0" />
+                  {t.label}
+                </button>
               ))}
-            </select>
-          </label>
-        </aside>
+            </div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Cor</p>
+            <div className="flex flex-wrap gap-2">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => {
+                    setColor(c);
+                    if (selected !== null)
+                      recordShapes(
+                        shapesRef.current.map((shape) =>
+                          shape.id === selected ? { ...shape, color: c } : shape,
+                        ),
+                      );
+                  }}
+                  aria-label={c}
+                  style={{ background: c }}
+                  className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-foreground" : "border-transparent"}`}
+                />
+              ))}
+            </div>
+            <label className="block text-xs text-muted-foreground">
+              Espessura: {width}
+              <input
+                type="range"
+                min={2}
+                max={14}
+                value={width}
+                onChange={(e) => setWidth(+e.target.value)}
+                className="w-full accent-primary"
+              />
+            </label>
+            <label className="block text-xs text-muted-foreground">
+              Duração na tela: {dur}s
+              <input
+                type="range"
+                min={0.5}
+                max={15}
+                step={0.5}
+                value={dur}
+                onChange={(e) => setDur(+e.target.value)}
+                className="w-full accent-primary"
+              />
+            </label>
+            {screenCapture && (
+              <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-2 text-xs">
+                <p className="font-semibold text-foreground">Cortar laterais da captura</p>
+                <p className="text-muted-foreground">
+                  A captura veio da tela inteira. Aumente o zoom para esconder thumbnails e ajuste o
+                  centro.
+                </p>
+                <label className="block">
+                  Zoom: {captureZoom.toFixed(2)}x
+                  <input
+                    type="range"
+                    min={1}
+                    max={2}
+                    step={0.01}
+                    value={captureZoom}
+                    onChange={(event) => setCaptureZoom(+event.target.value)}
+                    className="w-full accent-primary"
+                  />
+                </label>
+                <label className="block">
+                  Enquadramento horizontal:{" "}
+                  {captureOffset > 0 ? "direita" : captureOffset < 0 ? "esquerda" : "centro"}
+                  <input
+                    type="range"
+                    min={-18}
+                    max={18}
+                    step={1}
+                    value={captureOffset}
+                    onChange={(event) => setCaptureOffset(+event.target.value)}
+                    className="w-full accent-primary"
+                  />
+                </label>
+              </div>
+            )}
+          </aside>
+        )}
 
         <main className="space-y-3">
           <div className="relative overflow-hidden rounded-lg bg-muted">
@@ -1079,7 +1113,7 @@ function Editor() {
               {exportError}
             </p>
           )}
-          {src && (
+          {src && step !== "export" && (
             <div className="rounded-xl border border-border bg-card p-3">
               <div className="flex items-center gap-3">
                 <button
@@ -1174,149 +1208,266 @@ function Editor() {
               </div>
             </div>
           )}
-        </main>
-
-        <aside className="space-y-3 rounded-xl border border-border bg-card p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Marcações ({shapes.length})
-            </p>
-            <div className="flex gap-1">
-              <button
-                onClick={undo}
-                disabled={pastRef.current.length === 0}
-                title="Desfazer (Ctrl/Cmd+Z)"
-                className="rounded p-1 text-primary hover:bg-secondary disabled:opacity-30"
-              >
-                <Undo2 className="h-4 w-4" />
-              </button>
-              <button
-                onClick={redo}
-                disabled={futureRef.current.length === 0}
-                title="Refazer (Ctrl/Cmd+Shift+Z)"
-                className="rounded p-1 text-primary hover:bg-secondary disabled:opacity-30"
-              >
-                <Redo2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-          <ul className="max-h-72 space-y-1 overflow-auto">
-            {shapes.map((s) => (
-              <li key={s.id}>
-                <button
-                  onClick={() => {
-                    setSelected(s.id);
-                    seek(s.start);
-                  }}
-                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${selected === s.id ? "bg-accent" : "hover:bg-secondary"}`}
-                >
-                  <span className="h-3 w-3 rounded-full" style={{ background: s.color }} />
-                  {s.trajectory
-                    ? "Trajeto"
-                    : TOOLS.find((t) => t.id === s.tool)?.label.split(" ")[0]}{" "}
-                  {s.text ? `“${s.text}”` : ""}
-                  <span className="ml-auto font-mono text-xs text-muted-foreground">
-                    {fmt(s.start)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {sel && (
-            <div className="space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
-              <div className="flex items-center justify-between">
-                <p className="font-bold uppercase tracking-widest text-foreground">Propriedades</p>
-                <span>{TOOLS.find((item) => item.id === sel.tool)?.label}</span>
+          {step === "export" && src && (
+            <section className="space-y-4 rounded-xl border border-primary/40 bg-card p-4 shadow-sm">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-primary">Etapa 4</p>
+                <h2 className="mt-1 font-display text-2xl">Exportar a jogada</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Escolha o formato e o trecho. O arquivo será gerado em MP4.
+                </p>
               </div>
-              {sel.tool === "text" && (
-                <label className="block">
-                  Texto
-                  <textarea
-                    value={sel.text ?? ""}
-                    onChange={(event) => upd({ text: event.target.value })}
-                    rows={3}
-                    autoFocus
-                    className="mt-1 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none ring-offset-background focus:ring-2 focus:ring-ring"
-                    placeholder="Digite o texto da marcação"
+              <label className="block text-sm font-semibold">
+                Formato do vídeo
+                <select
+                  value={aspect}
+                  onChange={(event) => setAspect(event.target.value as Aspect)}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground"
+                >
+                  {ASPECTS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm text-muted-foreground">
+                  Começa em {fmt(clipStart)}
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, clipEnd - 0.05)}
+                    step={0.05}
+                    value={clipStart}
+                    onChange={(event) => setClipStart(+event.target.value)}
+                    className="w-full accent-primary"
                   />
                 </label>
-              )}
-              <div>
-                <span className="block">Cor</span>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {COLORS.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      aria-label={`Usar cor ${item}`}
-                      onClick={() => {
-                        setColor(item);
-                        upd({ color: item });
-                      }}
-                      style={{ background: item }}
-                      className={`h-6 w-6 rounded-full border-2 ${sel.color === item ? "border-foreground" : "border-transparent"}`}
-                    />
-                  ))}
-                </div>
+                <label className="text-sm text-muted-foreground">
+                  Termina em {fmt(clipEnd || length)}
+                  <input
+                    type="range"
+                    min={Math.min(length, clipStart + 0.05)}
+                    max={length || 0}
+                    step={0.05}
+                    value={clipEnd || length}
+                    onChange={(event) => setClipEnd(+event.target.value)}
+                    className="w-full accent-primary"
+                  />
+                </label>
               </div>
-              <label className="block">
-                Espessura: {sel.width}
-                <input
-                  type="range"
-                  min={2}
-                  max={14}
-                  value={sel.width}
-                  onChange={(event) => {
-                    const value = +event.target.value;
-                    setWidth(value);
-                    upd({ width: value });
-                  }}
-                  className="w-full accent-primary"
-                />
-              </label>
-              <label className="block">
-                Início: {fmt(sel.start)}
-                <input
-                  type="range"
-                  min={0}
-                  max={length}
-                  step={0.05}
-                  value={sel.start}
-                  onChange={(e) => {
-                    upd({ start: +e.target.value });
-                    seek(+e.target.value);
-                  }}
-                  className="w-full accent-primary"
-                />
-              </label>
-              <label className="block">
-                Duração na tela: {sel.dur}s — desaparece em {fmt(sel.start + sel.dur)}
-                <input
-                  type="range"
-                  min={0.5}
-                  max={15}
-                  step={0.5}
-                  value={sel.dur}
-                  onChange={(e) => upd({ dur: +e.target.value })}
-                  className="w-full accent-primary"
-                />
-              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep("review")}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary"
+                >
+                  Voltar para revisar
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting !== null}
+                  onClick={() => void exportVideo()}
+                  className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground disabled:opacity-50"
+                >
+                  {converting
+                    ? "Convertendo MP4…"
+                    : exporting !== null
+                      ? `Exportando ${Math.round(exporting * 100)}%`
+                      : "Exportar MP4"}
+                </button>
+                {exporting !== null && (
+                  <button
+                    type="button"
+                    onClick={cancelExport}
+                    className="rounded-lg bg-destructive px-4 py-2 text-sm font-bold text-destructive-foreground"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+          {step === "mark" && src && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+              <p className="text-sm text-muted-foreground">
+                Terminou de desenhar? Revise as marcações antes de exportar.
+              </p>
               <button
-                onClick={() => {
-                  recordShapes(shapesRef.current.filter((s) => s.id !== selected));
-                  setSelected(null);
-                }}
-                className="w-full rounded-md bg-destructive py-1.5 font-semibold text-destructive-foreground"
+                type="button"
+                onClick={() => goToStep("review")}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
               >
-                Apagar marcação
+                Revisar marcações
               </button>
             </div>
           )}
-          <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-            Dica: o vídeo pausa ao desenhar. Depois, cada marcação aparece no início configurado e
-            desaparece quando chega ao fim da duração — por padrão, após 2 segundos.
-          </p>
-        </aside>
+          {step === "review" && src && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+              <button
+                type="button"
+                onClick={() => goToStep("mark")}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary"
+              >
+                Voltar a marcar
+              </button>
+              <button
+                type="button"
+                onClick={() => goToStep("export")}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
+              >
+                Continuar para exportar
+              </button>
+            </div>
+          )}
+        </main>
+
+        {step === "review" && (
+          <aside className="space-y-3 rounded-xl border border-border bg-card p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Marcações ({shapes.length})
+              </p>
+              <div className="flex gap-1">
+                <button
+                  onClick={undo}
+                  disabled={pastRef.current.length === 0}
+                  title="Desfazer (Ctrl/Cmd+Z)"
+                  className="rounded p-1 text-primary hover:bg-secondary disabled:opacity-30"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={futureRef.current.length === 0}
+                  title="Refazer (Ctrl/Cmd+Shift+Z)"
+                  className="rounded p-1 text-primary hover:bg-secondary disabled:opacity-30"
+                >
+                  <Redo2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <ul className="max-h-72 space-y-1 overflow-auto">
+              {shapes.map((s) => (
+                <li key={s.id}>
+                  <button
+                    onClick={() => {
+                      setSelected(s.id);
+                      seek(s.start);
+                    }}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${selected === s.id ? "bg-accent" : "hover:bg-secondary"}`}
+                  >
+                    <span className="h-3 w-3 rounded-full" style={{ background: s.color }} />
+                    {s.trajectory
+                      ? "Trajeto"
+                      : TOOLS.find((t) => t.id === s.tool)?.label.split(" ")[0]}{" "}
+                    {s.text ? `“${s.text}”` : ""}
+                    <span className="ml-auto font-mono text-xs text-muted-foreground">
+                      {fmt(s.start)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {sel && (
+              <div className="space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold uppercase tracking-widest text-foreground">
+                    Propriedades
+                  </p>
+                  <span>{TOOLS.find((item) => item.id === sel.tool)?.label}</span>
+                </div>
+                {sel.tool === "text" && (
+                  <label className="block">
+                    Texto
+                    <textarea
+                      value={sel.text ?? ""}
+                      onChange={(event) => upd({ text: event.target.value })}
+                      rows={3}
+                      autoFocus
+                      className="mt-1 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+                      placeholder="Digite o texto da marcação"
+                    />
+                  </label>
+                )}
+                <div>
+                  <span className="block">Cor</span>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {COLORS.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        aria-label={`Usar cor ${item}`}
+                        onClick={() => {
+                          setColor(item);
+                          upd({ color: item });
+                        }}
+                        style={{ background: item }}
+                        className={`h-6 w-6 rounded-full border-2 ${sel.color === item ? "border-foreground" : "border-transparent"}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <label className="block">
+                  Espessura: {sel.width}
+                  <input
+                    type="range"
+                    min={2}
+                    max={14}
+                    value={sel.width}
+                    onChange={(event) => {
+                      const value = +event.target.value;
+                      setWidth(value);
+                      upd({ width: value });
+                    }}
+                    className="w-full accent-primary"
+                  />
+                </label>
+                <label className="block">
+                  Início: {fmt(sel.start)}
+                  <input
+                    type="range"
+                    min={0}
+                    max={length}
+                    step={0.05}
+                    value={sel.start}
+                    onChange={(e) => {
+                      upd({ start: +e.target.value });
+                      seek(+e.target.value);
+                    }}
+                    className="w-full accent-primary"
+                  />
+                </label>
+                <label className="block">
+                  Duração na tela: {sel.dur}s — desaparece em {fmt(sel.start + sel.dur)}
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={15}
+                    step={0.5}
+                    value={sel.dur}
+                    onChange={(e) => upd({ dur: +e.target.value })}
+                    className="w-full accent-primary"
+                  />
+                </label>
+                <button
+                  onClick={() => {
+                    recordShapes(shapesRef.current.filter((s) => s.id !== selected));
+                    setSelected(null);
+                  }}
+                  className="w-full rounded-md bg-destructive py-1.5 font-semibold text-destructive-foreground"
+                >
+                  Apagar marcação
+                </button>
+              </div>
+            )}
+            <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+              Dica: o vídeo pausa ao desenhar. Depois, cada marcação aparece no início configurado e
+              desaparece quando chega ao fim da duração — por padrão, após 2 segundos.
+            </p>
+          </aside>
+        )}
       </div>
     </div>
   );
