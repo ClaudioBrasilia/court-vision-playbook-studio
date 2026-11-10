@@ -30,6 +30,10 @@ As transições validam a existência de vídeo e a ausência de gravação/expo
 
 Depois da simplificação do fluxo, a primeira camada de recursos inspirados em Onform, Hudl e Dartfish será implementada sem alterar a arquitetura principal: velocidades de reprodução de 0,25x a 1x, avanço quadro a quadro, o comando direto “Marcar este momento” e tags rápidas de basquete. As tags serão salvas no projeto JSON e reaparecerão na revisão. Narração, comparação lado a lado e rastreamento ficam para etapas posteriores, após validar o uso básico.
 
+## Modo Social para movimentações na quadra
+
+O objetivo imediato é criar vídeos de jogadas para postagem, com a movimentação dos jogadores como foco. A exportação passa a oferecer presets Reels/TikTok 9:16, Feed 1:1, Quadra 16:9 e Original; o usuário pode ajustar o enquadramento horizontal para manter os jogadores visíveis. O painel também permite título da jogada, contexto curto e identificação do perfil, exibidos no preview e gravados no MP4. O formato vertical é o padrão inicial, mas o preset “Quadra 16:9” fica explícito para lances em que mostrar toda a quadra é mais importante que ocupar a tela do celular.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.

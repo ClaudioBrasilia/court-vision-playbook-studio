@@ -28,6 +28,14 @@
 - [ ] O usuário deve poder aplicar tags de basquete como Pick and roll, Transição, Arremesso, Turnover, Rebote e Boa defesa.
 - [ ] As tags devem aparecer na revisão e ser preservadas ao salvar e abrir um projeto JSON.
 
+## Modo Social para movimentações na quadra
+
+- [ ] A exportação deve oferecer presets claros para Reels/TikTok 9:16, Feed 1:1, Quadra 16:9 e Original.
+- [ ] O formato vertical deve ser o padrão inicial, sem esconder o preset 16:9 para lances em que toda a quadra precisa aparecer.
+- [ ] O usuário deve poder ajustar o enquadramento horizontal antes de exportar para manter jogadores e movimentações visíveis.
+- [ ] O usuário deve poder adicionar título da jogada, contexto curto e perfil/marca, visualizando esses elementos antes da exportação.
+- [ ] Título, contexto e marca devem ser renderizados no MP4 final junto com setas, círculos, trajetórias e demais marcações.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.

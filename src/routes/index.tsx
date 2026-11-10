@@ -68,6 +68,10 @@ type ProjectFile = {
   clipStart: number;
   clipEnd: number;
   tags?: string[];
+  socialTitle?: string;
+  socialSubtitle?: string;
+  watermark?: string;
+  socialOffset?: number;
 };
 
 const TOOLS: { id: Tool; label: string; icon: LucideIcon }[] = [
@@ -265,7 +269,7 @@ function Editor() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [clipStart, setClipStart] = useState(0);
   const [clipEnd, setClipEnd] = useState(0);
-  const [aspect, setAspect] = useState<Aspect>("source");
+  const [aspect, setAspect] = useState<Aspect>("vertical");
   const [projectMessage, setProjectMessage] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);
   const [screenCapture, setScreenCapture] = useState(false);
@@ -275,6 +279,10 @@ function Editor() {
   const [step, setStep] = useState<EditorStep>("open");
   const [playbackRate, setPlaybackRate] = useState(1);
   const [tags, setTags] = useState<string[]>([]);
+  const [socialTitle, setSocialTitle] = useState("");
+  const [socialSubtitle, setSocialSubtitle] = useState("");
+  const [watermark, setWatermark] = useState("");
+  const [socialOffset, setSocialOffset] = useState(0);
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -583,6 +591,34 @@ function Editor() {
     setSelected(null);
     setProjectMessage("Momento marcado. Desenhe a seta sobre a jogada.");
   };
+  const drawSocialOverlay = (ctx: CanvasRenderingContext2D, W: number, H: number) => {
+    const title = socialTitle.trim();
+    const subtitle = socialSubtitle.trim();
+    const mark = watermark.trim();
+    if (!title && !subtitle && !mark) return;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.8)";
+    ctx.shadowBlur = Math.max(4, W / 180);
+    if (title) {
+      ctx.textAlign = "left";
+      ctx.font = `800 ${Math.max(22, W / 18)}px sans-serif`;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(title, W * 0.06, H * 0.1);
+    }
+    if (subtitle) {
+      ctx.textAlign = "left";
+      ctx.font = `600 ${Math.max(14, W / 30)}px sans-serif`;
+      ctx.fillStyle = "#ffb36b";
+      ctx.fillText(subtitle, W * 0.06, H * (title ? 0.145 : 0.1));
+    }
+    if (mark) {
+      ctx.textAlign = "right";
+      ctx.font = `700 ${Math.max(12, W / 35)}px sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,.9)";
+      ctx.fillText(mark, W * 0.94, H * 0.94);
+    }
+    ctx.restore();
+  };
 
   const convertToMp4 = async (input: Blob): Promise<Blob> => {
     const { FFmpeg } = await import("@ffmpeg/ffmpeg");
@@ -686,6 +722,7 @@ function Editor() {
       if (sourceRatio > destinationRatio) {
         sw = v.videoHeight * destinationRatio;
         sx = (v.videoWidth - sw) / 2;
+        sx -= (socialOffset / 100) * sw;
       }
       if (sourceRatio < destinationRatio) {
         sh = v.videoWidth / destinationRatio;
@@ -698,11 +735,13 @@ function Editor() {
         sx -= (captureOffset / 100) * originalWidth;
         sx = Math.max(0, Math.min(v.videoWidth - sw, sx));
       }
+      sx = Math.max(0, Math.min(v.videoWidth - sw, sx));
       ctx.drawImage(v, sx, sy, sw, sh, 0, 0, out.width, out.height);
       const t = v.currentTime;
       for (const shape of shapesRef.current)
         if (t >= shape.start && t <= shape.start + shape.dur)
           drawShape(ctx, shape, out.width, out.height, t);
+      drawSocialOverlay(ctx, out.width, out.height);
     };
     let raf = 0;
     const frame = () => {
@@ -771,6 +810,10 @@ function Editor() {
       clipStart,
       clipEnd,
       tags,
+      socialTitle,
+      socialSubtitle,
+      watermark,
+      socialOffset,
     };
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
@@ -793,6 +836,10 @@ function Editor() {
       setClipStart(project.clipStart);
       setClipEnd(project.clipEnd);
       setTags(Array.isArray(project.tags) ? project.tags : []);
+      setSocialTitle(project.socialTitle ?? "");
+      setSocialSubtitle(project.socialSubtitle ?? "");
+      setWatermark(project.watermark ?? "");
+      setSocialOffset(project.socialOffset ?? 0);
       setProjectMessage("Projeto carregado. Abra o vídeo original para visualizar as marcações.");
     } catch {
       setProjectMessage("Não foi possível abrir este projeto.");
@@ -1154,6 +1201,25 @@ function Editor() {
                   }
                   className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
                 />
+                {step === "export" && (socialTitle || socialSubtitle || watermark) && (
+                  <div className="pointer-events-none absolute inset-0 p-[6%] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,.8)]">
+                    {socialTitle && (
+                      <p className="text-[clamp(1.2rem,4vw,3rem)] font-black leading-tight">
+                        {socialTitle}
+                      </p>
+                    )}
+                    {socialSubtitle && (
+                      <p className="mt-1 text-[clamp(.8rem,2vw,1.4rem)] font-bold text-orange-300">
+                        {socialSubtitle}
+                      </p>
+                    )}
+                    {watermark && (
+                      <p className="absolute bottom-[6%] right-[6%] text-sm font-bold opacity-90">
+                        {watermark}
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex aspect-video flex-col items-center justify-center gap-2 text-center">
@@ -1296,25 +1362,85 @@ function Editor() {
             <section className="space-y-4 rounded-xl border border-primary/40 bg-card p-4 shadow-sm">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-primary">Etapa 4</p>
-                <h2 className="mt-1 font-display text-2xl">Exportar a jogada</h2>
+                <h2 className="mt-1 font-display text-2xl">Preparar vídeo para postar</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Escolha o formato e o trecho. O arquivo será gerado em MP4.
+                  Destaque a movimentação na quadra e exporte em MP4 pronto para redes sociais.
                 </p>
               </div>
-              <label className="block text-sm font-semibold">
-                Formato do vídeo
-                <select
-                  value={aspect}
-                  onChange={(event) => setAspect(event.target.value as Aspect)}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground"
-                >
+              <div>
+                <p className="text-sm font-semibold">Formato da postagem</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {ASPECTS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setAspect(item.id)}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${aspect === item.id ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}
+                    >
+                      {item.id === "vertical"
+                        ? "Reels / TikTok"
+                        : item.id === "square"
+                          ? "Feed 1:1"
+                          : item.id === "landscape"
+                            ? "Quadra 16:9"
+                            : "Original"}
+                      <span className="mt-1 block font-normal text-muted-foreground">
+                        {item.label}
+                      </span>
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
+              {aspect !== "source" && (
+                <label className="block text-sm text-muted-foreground">
+                  Enquadrar a quadra:{" "}
+                  {socialOffset < 0 ? "esquerda" : socialOffset > 0 ? "direita" : "centro"}
+                  <input
+                    type="range"
+                    min={-35}
+                    max={35}
+                    step={1}
+                    value={socialOffset}
+                    onChange={(event) => setSocialOffset(+event.target.value)}
+                    className="w-full accent-primary"
+                  />
+                  <span className="text-xs">
+                    Mova o enquadramento para manter os jogadores e a movimentação visíveis.
+                  </span>
+                </label>
+              )}
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="text-sm font-semibold">
+                  Título da jogada
+                  <input
+                    value={socialTitle}
+                    onChange={(event) => setSocialTitle(event.target.value)}
+                    maxLength={48}
+                    placeholder="Ex.: Corte nas costas"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground"
+                  />
+                </label>
+                <label className="text-sm font-semibold">
+                  Contexto curto
+                  <input
+                    value={socialSubtitle}
+                    onChange={(event) => setSocialSubtitle(event.target.value)}
+                    maxLength={48}
+                    placeholder="Q4 · 02:14"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground"
+                  />
+                </label>
+                <label className="text-sm font-semibold">
+                  Perfil / marca
+                  <input
+                    value={watermark}
+                    onChange={(event) => setWatermark(event.target.value)}
+                    maxLength={32}
+                    placeholder="@seuperfil"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground"
+                  />
+                </label>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm text-muted-foreground">
                   Começa em {fmt(clipStart)}
