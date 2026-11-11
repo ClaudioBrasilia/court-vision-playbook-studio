@@ -76,6 +76,16 @@
 - [ ] Cada projeto deve poder ser duplicado com novo identificador e nome de cópia.
 - [ ] A cópia deve preservar os dados da análise sem compartilhar referências mutáveis com o projeto original.
 
+## Fase 4 — Recursos profissionais de análise
+
+- [ ] O usuário deve poder carregar um segundo vídeo para comparação lado a lado.
+- [ ] Os dois vídeos devem acompanhar play, pausa e posição temporal do vídeo principal.
+- [ ] O usuário deve poder trocar o vídeo de referência sem perder as marcações do vídeo principal.
+- [ ] A fase deve evoluir depois para múltiplos ângulos sincronizados.
+- [ ] A fase deve evoluir depois para rastreamento semiautomático de jogador ou região.
+- [ ] A fase deve evoluir depois para estatísticas de jogadas.
+- [ ] A fase deve evoluir depois para medições de distância e ângulo.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.

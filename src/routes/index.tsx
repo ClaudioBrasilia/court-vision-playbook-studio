@@ -293,8 +293,12 @@ const fmt = (t: number) =>
 
 function Editor() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const comparisonPrimaryVideoRef = useRef<HTMLVideoElement>(null);
+  const comparisonVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [src, setSrc] = useState<string | null>(null);
+  const [comparisonSrc, setComparisonSrc] = useState<string | null>(null);
+  const [comparisonName, setComparisonName] = useState("Vídeo de referência");
   const [tool, setTool] = useState<Tool>("arrow");
   const [color, setColor] = useState<string>(COLORS[0] ?? "");
   const [width, setWidth] = useState(6);
@@ -487,6 +491,11 @@ function Editor() {
         }
         ctx.clearRect(0, 0, c.width, c.height);
         const t = v.currentTime;
+        const comparison = comparisonVideoRef.current;
+        if (comparison && Math.abs(comparison.currentTime - t) > 0.08) comparison.currentTime = t;
+        const comparisonPrimary = comparisonPrimaryVideoRef.current;
+        if (comparisonPrimary && Math.abs(comparisonPrimary.currentTime - t) > 0.08)
+          comparisonPrimary.currentTime = t;
         const live = liveRef.current;
         if (live) {
           live.shape.trajectory = recordSample(
@@ -1480,9 +1489,15 @@ function Editor() {
                   src={src}
                   playbackRate={playbackRate}
                   onLoadedMetadata={onLoaded}
-                  onPlay={() => setPlaying(true)}
+                  onPlay={() => {
+                    setPlaying(true);
+                    void comparisonPrimaryVideoRef.current?.play().catch(() => undefined);
+                    void comparisonVideoRef.current?.play().catch(() => undefined);
+                  }}
                   onPause={() => {
                     setPlaying(false);
+                    comparisonPrimaryVideoRef.current?.pause();
+                    comparisonVideoRef.current?.pause();
                     if (liveRef.current) finishRecording();
                   }}
                   onEnded={finishRecording}
@@ -1897,6 +1912,77 @@ function Editor() {
                 Continuar para exportar
               </button>
             </div>
+          )}
+          {step === "review" && src && (
+            <section className="space-y-3 rounded-xl border border-primary/30 bg-card p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-primary">
+                    Análise profissional
+                  </p>
+                  <h2 className="font-display text-xl">Comparar vídeos lado a lado</h2>
+                  <p className="text-xs text-muted-foreground">
+                    O vídeo de referência acompanha play, pausa e tempo do vídeo principal.
+                  </p>
+                </div>
+                <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold hover:bg-secondary">
+                  <Upload className="h-4 w-4" />
+                  {comparisonSrc ? "Trocar referência" : "Adicionar referência"}
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (comparisonSrc) URL.revokeObjectURL(comparisonSrc);
+                      setComparisonName(file.name);
+                      setComparisonSrc(URL.createObjectURL(file));
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              {comparisonSrc ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="overflow-hidden rounded-lg border border-primary/50 bg-black">
+                    <p className="bg-primary/15 px-3 py-1.5 text-xs font-bold text-primary">
+                      Vídeo principal
+                    </p>
+                    <video
+                      ref={comparisonPrimaryVideoRef}
+                      src={src}
+                      muted
+                      playsInline
+                      onLoadedMetadata={() => {
+                        if (comparisonPrimaryVideoRef.current && videoRef.current)
+                          comparisonPrimaryVideoRef.current.currentTime =
+                            videoRef.current.currentTime;
+                      }}
+                      className="block aspect-video w-full object-contain"
+                    />
+                  </div>
+                  <div className="overflow-hidden rounded-lg border border-border bg-black">
+                    <p className="bg-secondary px-3 py-1.5 text-xs font-bold">{comparisonName}</p>
+                    <video
+                      ref={comparisonVideoRef}
+                      src={comparisonSrc}
+                      muted
+                      playsInline
+                      onLoadedMetadata={() => {
+                        if (comparisonVideoRef.current && videoRef.current)
+                          comparisonVideoRef.current.currentTime = videoRef.current.currentTime;
+                      }}
+                      className="block aspect-video w-full object-contain"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                  Adicione outro ângulo, uma execução correta ou uma jogada para comparar.
+                </p>
+              )}
+            </section>
           )}
         </main>
         {step === "mark" && src && !focusMode && (

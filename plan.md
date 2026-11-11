@@ -54,6 +54,10 @@ A primeira versão da biblioteca usa o armazenamento local do navegador, sem log
 
 Ao salvar com um vídeo carregado, a biblioteca captura uma miniatura JPEG leve do quadro atual. Cada card também pode ser duplicado, gerando novo identificador e nome de cópia com dados independentes para editar uma variação sem alterar a jogada original.
 
+## Fase 4 — Recursos profissionais de análise
+
+O foco desta fase é transformar o editor social em uma ferramenta de análise de basquete. A sequência planejada é: comparação lado a lado de dois vídeos; suporte a múltiplos ângulos; rastreamento semiautomático de jogador ou região; registro de estatísticas da jogada; e medições de distância e ângulo sobre o quadro. A primeira entrega começa pela comparação sincronizada, porque ela cria a base de revisão antes/depois sem introduzir automação frágil.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.
