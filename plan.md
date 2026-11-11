@@ -38,6 +38,10 @@ O objetivo imediato é criar vídeos de jogadas para postagem, com a movimentaç
 
 Em telas menores, o painel lateral de desktop é substituído por uma barra inferior fixa com áreas de toque de pelo menos 44 px, ferramentas principais e um menu para as demais ferramentas e cores. Os controles de reprodução quebram em várias linhas para não ficarem apertados. O vídeo tem um modo de foco em tela cheia para desenhar com o dedo, mantendo `touch-none` e eventos Pointer no canvas para evitar rolagem acidental durante o gesto.
 
+## Fase 1 — Marcações animadas
+
+As marcações devem aparecer de forma progressiva para explicar a movimentação, em vez de simplesmente surgir prontas. Setas, linhas tracejadas e linhas revelam o traçado e a ponta; o desenho livre revela os pontos gradualmente; zonas expandem até o tamanho desenhado; círculos e holofotes recebem um pulso sutil. A duração existente de cada anotação continua controlando quando ela aparece e desaparece, e a timeline permanece como o lugar para revisar esse intervalo.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.

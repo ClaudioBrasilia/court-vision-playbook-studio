@@ -44,6 +44,15 @@
 - [ ] O usuário deve poder abrir o vídeo em modo de foco/tela cheia para desenhar com o dedo.
 - [ ] O canvas deve continuar usando eventos de ponteiro e impedir rolagem acidental durante o desenho.
 
+## Fase 1 — Marcações animadas
+
+- [ ] Setas, linhas e setas tracejadas devem revelar o traçado progressivamente durante o início da duração da marcação.
+- [ ] O desenho livre deve aparecer gradualmente ao longo da animação inicial, mantendo a ponta visível quando concluído.
+- [ ] Zonas devem expandir até o retângulo desenhado em vez de aparecerem completas instantaneamente.
+- [ ] Círculos e holofotes devem receber um pulso sutil para destacar o jogador ou a região da quadra.
+- [ ] A duração e o início configurados na timeline devem continuar controlando a entrada e a saída de cada marcação.
+- [ ] A animação deve ser aplicada também no MP4 exportado, não apenas na prévia do editor.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.

@@ -113,6 +113,9 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
   if (!p.length) return;
   const k = W / 1000;
   const lw = s.width * k;
+  const reveal = s.trajectory
+    ? 1
+    : Math.max(0, Math.min(1, (t - s.start) / Math.min(0.45, Math.max(0.18, s.dur * 0.35))));
   const a = s.trajectory ? 1 : Math.min(1, (t - s.start) / 0.25);
   ctx.save();
   ctx.globalAlpha = isFinite(a) ? Math.max(0, a) : 1;
@@ -145,32 +148,43 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
     case "dashed":
     case "line": {
       if (s.tool === "dashed") ctx.setLineDash([lw * 2.5, lw * 2]);
+      const end = {
+        x: a0.x + (b.x - a0.x) * reveal,
+        y: a0.y + (b.y - a0.y) * reveal,
+      };
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
-      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(end.x, end.y);
       ctx.stroke();
-      if (s.tool === "line") {
-        const ang = Math.atan2(b.y - a0.y, b.x - a0.x) + Math.PI / 2,
+      if (s.tool === "line" && reveal > 0.8) {
+        const ang = Math.atan2(end.y - a0.y, end.x - a0.x) + Math.PI / 2,
           L = lw * 4;
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.moveTo(b.x + L * Math.cos(ang), b.y + L * Math.sin(ang));
-        ctx.lineTo(b.x - L * Math.cos(ang), b.y - L * Math.sin(ang));
+        ctx.moveTo(end.x + L * Math.cos(ang), end.y + L * Math.sin(ang));
+        ctx.lineTo(end.x - L * Math.cos(ang), end.y - L * Math.sin(ang));
         ctx.stroke();
-      } else head(a0, b);
+      } else if (s.tool !== "line" && reveal > 0.8) head(a0, end);
       break;
     }
     case "pen": {
+      const count = Math.max(2, Math.ceil(p.length * reveal));
+      const visible = p.slice(0, count);
       ctx.beginPath();
-      p.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      visible.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
       ctx.stroke();
-      const tail = p[p.length - 4];
-      if (tail) head(tail, b);
+      const tail = visible[visible.length - 4];
+      const visibleEnd = visible[visible.length - 1];
+      if (tail && visibleEnd && reveal > 0.8) head(tail, visibleEnd);
       break;
     }
     case "circle":
     case "spot": {
-      const rx = Math.abs(b.x - a0.x) || 30 * k,
+      const pulse =
+        0.94 +
+        reveal * 0.06 +
+        (s.tool === "spot" || s.tool === "circle" ? Math.sin(t * 8) * 0.025 : 0);
+      const rx = (Math.abs(b.x - a0.x) || 30 * k) * pulse,
         ry = rx * 0.4;
       if (s.tool === "spot") {
         ctx.shadowBlur = 0;
@@ -189,10 +203,14 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number
       break;
     }
     case "zone": {
+      const end = {
+        x: a0.x + (b.x - a0.x) * reveal,
+        y: a0.y + (b.y - a0.y) * reveal,
+      };
       ctx.globalAlpha *= 0.3;
-      ctx.fillRect(a0.x, a0.y, b.x - a0.x, b.y - a0.y);
+      ctx.fillRect(a0.x, a0.y, end.x - a0.x, end.y - a0.y);
       ctx.globalAlpha /= 0.3;
-      ctx.strokeRect(a0.x, a0.y, b.x - a0.x, b.y - a0.y);
+      ctx.strokeRect(a0.x, a0.y, end.x - a0.x, end.y - a0.y);
       break;
     }
     case "text": {
