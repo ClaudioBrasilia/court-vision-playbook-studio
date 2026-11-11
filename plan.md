@@ -52,6 +52,8 @@ O primeiro recurso da Fase 2 é um seletor de estilo social com quatro presets: 
 
 A primeira versão da biblioteca usa o armazenamento local do navegador, sem login. Cada entrada guarda nome, tags, data de atualização e o mesmo projeto JSON já usado pelo editor. A etapa Abrir vídeo oferece busca por nome ou tag, reabertura rápida e exclusão. Como vídeos podem ser grandes e capturas podem ser temporárias, a biblioteca deixa explícito que o vídeo original deve ser aberto novamente quando não estiver disponível na sessão.
 
+Ao salvar com um vídeo carregado, a biblioteca captura uma miniatura JPEG leve do quadro atual. Cada card também pode ser duplicado, gerando novo identificador e nome de cópia com dados independentes para editar uma variação sem alterar a jogada original.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.

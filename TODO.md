@@ -71,6 +71,10 @@
 - [ ] O usuário deve poder reabrir uma jogada e restaurar marcações, duração, tags e configurações sociais.
 - [ ] O usuário deve poder excluir uma jogada da biblioteca.
 - [ ] A interface deve informar que o vídeo original precisa ser aberto novamente quando não estiver disponível na sessão.
+- [ ] Ao salvar com vídeo carregado, a jogada deve receber uma miniatura leve do quadro atual.
+- [ ] Projetos sem miniatura devem continuar visíveis com um estado alternativo claro.
+- [ ] Cada projeto deve poder ser duplicado com novo identificador e nome de cópia.
+- [ ] A cópia deve preservar os dados da análise sem compartilhar referências mutáveis com o projeto original.
 
 ## Preservação
 

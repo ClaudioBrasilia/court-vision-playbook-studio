@@ -25,6 +25,7 @@ import {
   Library,
   Search,
   Trash2,
+  Copy,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ type SavedPlay = {
   name: string;
   updatedAt: string;
   tags: string[];
+  thumbnail?: string;
   project: ProjectFile;
 };
 
@@ -959,6 +961,17 @@ function Editor() {
     if (name) setProjectName(name);
     setStep(src && length ? "mark" : "open");
   };
+  const captureThumbnail = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return undefined;
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = Math.round((video.videoHeight / video.videoWidth) * canvas.width);
+    const context = canvas.getContext("2d");
+    if (!context) return undefined;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.58);
+  };
   const saveToLibrary = () => {
     const name = projectName.trim() || "Minha jogada";
     const entry: SavedPlay = {
@@ -966,11 +979,30 @@ function Editor() {
       name,
       updatedAt: new Date().toISOString(),
       tags,
+      thumbnail: captureThumbnail(),
       project: buildProject(),
     };
     persistLibrary([entry, ...savedPlays].slice(0, 30));
     setProjectName(name);
     setProjectMessage("Jogada salva na biblioteca deste navegador.");
+  };
+  const duplicatePlay = (entry: SavedPlay) => {
+    const copy: SavedPlay = {
+      ...entry,
+      id: crypto.randomUUID(),
+      name: `${entry.name} — cópia`,
+      updatedAt: new Date().toISOString(),
+      project: {
+        ...entry.project,
+        shapes: entry.project.shapes.map((shape) => ({
+          ...shape,
+          pts: shape.pts.map((point) => ({ ...point })),
+        })),
+      },
+    };
+    persistLibrary([copy, ...savedPlays].slice(0, 30));
+    setProjectName(copy.name);
+    setProjectMessage("Cópia criada. Você pode reabrir e editar sem alterar o original.");
   };
   const openFromLibrary = (entry: SavedPlay) => {
     applyProject(entry.project, entry.name);
@@ -1372,6 +1404,17 @@ function Editor() {
                           key={entry.id}
                           className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3"
                         >
+                          {entry.thumbnail ? (
+                            <img
+                              src={entry.thumbnail}
+                              alt=""
+                              className="h-16 w-24 shrink-0 rounded-md object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-md bg-secondary text-[10px] text-muted-foreground">
+                              Sem miniatura
+                            </div>
+                          )}
                           <button
                             type="button"
                             onClick={() => openFromLibrary(entry)}
@@ -1392,14 +1435,24 @@ function Editor() {
                               ))}
                             </span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => removeFromLibrary(entry.id)}
-                            aria-label={`Excluir ${entry.name}`}
-                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex shrink-0 gap-1">
+                            <button
+                              type="button"
+                              onClick={() => duplicatePlay(entry)}
+                              aria-label={`Duplicar ${entry.name}`}
+                              className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeFromLibrary(entry.id)}
+                              aria-label={`Excluir ${entry.name}`}
+                              className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                   </div>
