@@ -22,6 +22,9 @@ import {
   Maximize2,
   Minimize2,
   MoreHorizontal,
+  Library,
+  Search,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -78,6 +81,13 @@ type ProjectFile = {
   socialOffset?: number;
   socialTemplate?: SocialTemplate;
 };
+type SavedPlay = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  tags: string[];
+  project: ProjectFile;
+};
 
 const TOOLS: { id: Tool; label: string; icon: LucideIcon }[] = [
   { id: "arrow", label: "Seta (passe/corte)", icon: MoveUpRight },
@@ -110,6 +120,7 @@ const SOCIAL_TEMPLATES: { id: SocialTemplate; label: string; description: string
   { id: "setplay", label: "Jogada ensaiada", description: "Foco no sistema" },
   { id: "tip", label: "Dica rápida", description: "Formato educativo" },
 ];
+const LIBRARY_KEY = "courtcoach.saved-plays.v1";
 
 function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number, t: number) {
   const anchor = s.pts[0];
@@ -315,6 +326,9 @@ function Editor() {
   const [watermark, setWatermark] = useState("");
   const [socialOffset, setSocialOffset] = useState(0);
   const [socialTemplate, setSocialTemplate] = useState<SocialTemplate>("tactical");
+  const [projectName, setProjectName] = useState("Minha jogada");
+  const [savedPlays, setSavedPlays] = useState<SavedPlay[]>([]);
+  const [librarySearch, setLibrarySearch] = useState("");
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -343,6 +357,26 @@ function Editor() {
     edge: "start" | "end";
     before: Shape[];
   } | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LIBRARY_KEY);
+      if (stored) setSavedPlays(JSON.parse(stored) as SavedPlay[]);
+    } catch {
+      setSavedPlays([]);
+    }
+  }, []);
+
+  const persistLibrary = (next: SavedPlay[]) => {
+    setSavedPlays(next);
+    try {
+      window.localStorage.setItem(LIBRARY_KEY, JSON.stringify(next));
+    } catch {
+      setProjectMessage(
+        "A biblioteca local está cheia. Exclua uma jogada antiga e tente novamente.",
+      );
+    }
+  };
 
   const recordShapes = (next: Shape[]) => {
     pastRef.current = [...pastRef.current, shapesRef.current].slice(-50);
@@ -894,22 +928,64 @@ function Editor() {
   const upd = (patch: Partial<Shape>) =>
     selected !== null &&
     recordShapes(shapesRef.current.map((s) => (s.id === selected ? { ...s, ...patch } : s)));
-  const saveProject = () => {
-    const project: ProjectFile = {
-      version: 1,
-      shapes,
-      width,
-      dur,
-      aspect,
-      clipStart,
-      clipEnd,
+  const buildProject = (): ProjectFile => ({
+    version: 1,
+    shapes,
+    width,
+    dur,
+    aspect,
+    clipStart,
+    clipEnd,
+    tags,
+    socialTitle,
+    socialSubtitle,
+    watermark,
+    socialOffset,
+    socialTemplate,
+  });
+  const applyProject = (project: ProjectFile, name?: string) => {
+    resetShapes(project.shapes);
+    setWidth(project.width);
+    setDur(project.dur);
+    setAspect(project.aspect);
+    setClipStart(project.clipStart);
+    setClipEnd(project.clipEnd);
+    setTags(Array.isArray(project.tags) ? project.tags : []);
+    setSocialTitle(project.socialTitle ?? "");
+    setSocialSubtitle(project.socialSubtitle ?? "");
+    setWatermark(project.watermark ?? "");
+    setSocialOffset(project.socialOffset ?? 0);
+    setSocialTemplate(project.socialTemplate ?? "tactical");
+    if (name) setProjectName(name);
+    setStep(src && length ? "mark" : "open");
+  };
+  const saveToLibrary = () => {
+    const name = projectName.trim() || "Minha jogada";
+    const entry: SavedPlay = {
+      id: crypto.randomUUID(),
+      name,
+      updatedAt: new Date().toISOString(),
       tags,
-      socialTitle,
-      socialSubtitle,
-      watermark,
-      socialOffset,
-      socialTemplate,
+      project: buildProject(),
     };
+    persistLibrary([entry, ...savedPlays].slice(0, 30));
+    setProjectName(name);
+    setProjectMessage("Jogada salva na biblioteca deste navegador.");
+  };
+  const openFromLibrary = (entry: SavedPlay) => {
+    applyProject(entry.project, entry.name);
+    setProjectMessage(
+      src && length
+        ? "Jogada reaberta. As marcações estão aplicadas ao vídeo atual."
+        : "Projeto reaberto. Abra o vídeo original para visualizar as marcações.",
+    );
+  };
+  const removeFromLibrary = (id: string) => {
+    persistLibrary(savedPlays.filter((entry) => entry.id !== id));
+    setProjectMessage("Jogada removida da biblioteca.");
+  };
+  const saveProject = () => {
+    const project = buildProject();
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
       new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
@@ -924,18 +1000,7 @@ function Editor() {
       const project = JSON.parse(await file.text()) as ProjectFile;
       if (project.version !== 1 || !Array.isArray(project.shapes))
         throw new Error("invalid project");
-      resetShapes(project.shapes);
-      setWidth(project.width);
-      setDur(project.dur);
-      setAspect(project.aspect);
-      setClipStart(project.clipStart);
-      setClipEnd(project.clipEnd);
-      setTags(Array.isArray(project.tags) ? project.tags : []);
-      setSocialTitle(project.socialTitle ?? "");
-      setSocialSubtitle(project.socialSubtitle ?? "");
-      setWatermark(project.watermark ?? "");
-      setSocialOffset(project.socialOffset ?? 0);
-      setSocialTemplate(project.socialTemplate ?? "tactical");
+      applyProject(project);
       setProjectMessage("Projeto carregado. Abra o vídeo original para visualizar as marcações.");
     } catch {
       setProjectMessage("Não foi possível abrir este projeto.");
@@ -1253,6 +1318,95 @@ function Editor() {
         )}
 
         <main className="space-y-3">
+          {step === "open" && (
+            <section className="space-y-4 rounded-xl border border-primary/30 bg-card p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <Library className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div>
+                  <h2 className="font-display text-2xl">Biblioteca de jogadas</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Salve análises neste navegador para continuar depois. O vídeo original precisa
+                    ser aberto novamente.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
+                  placeholder="Nome da jogada"
+                  maxLength={60}
+                  className="min-h-11 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={saveToLibrary}
+                  disabled={!src && shapes.length === 0}
+                  className="min-h-11 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-40"
+                >
+                  Salvar jogada
+                </button>
+              </div>
+              {savedPlays.length > 0 && (
+                <>
+                  <label className="relative block">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <input
+                      value={librarySearch}
+                      onChange={(event) => setLibrarySearch(event.target.value)}
+                      placeholder="Buscar por nome ou tag"
+                      className="min-h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
+                    />
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {savedPlays
+                      .filter((entry) => {
+                        const query = librarySearch.trim().toLowerCase();
+                        return (
+                          !query ||
+                          `${entry.name} ${entry.tags.join(" ")}`.toLowerCase().includes(query)
+                        );
+                      })
+                      .map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => openFromLibrary(entry)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span className="block truncate text-sm font-bold">{entry.name}</span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {new Date(entry.updatedAt).toLocaleDateString("pt-BR")}
+                            </span>
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {entry.tags.slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeFromLibrary(entry.id)}
+                            aria-label={`Excluir ${entry.name}`}
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
           <div
             className={`relative overflow-hidden bg-muted ${focusMode ? "fixed inset-0 z-50 flex items-center justify-center rounded-none" : "rounded-lg"}`}
           >

@@ -48,6 +48,10 @@ A timeline também oferece alças de início e fim em cada bloco de marcação. 
 
 O primeiro recurso da Fase 2 é um seletor de estilo social com quatro presets: Análise tática, Destaque, Jogada ensaiada e Dica rápida. Cada preset define a hierarquia, posição e cor de destaque do título, contexto e identificação, aparece na prévia e é renderizado no MP4. A escolha fica salva no projeto para repetir o mesmo padrão em novos ajustes.
 
+## Fase 3 — Biblioteca local de jogadas
+
+A primeira versão da biblioteca usa o armazenamento local do navegador, sem login. Cada entrada guarda nome, tags, data de atualização e o mesmo projeto JSON já usado pelo editor. A etapa Abrir vídeo oferece busca por nome ou tag, reabertura rápida e exclusão. Como vídeos podem ser grandes e capturas podem ser temporárias, a biblioteca deixa explícito que o vídeo original deve ser aberto novamente quando não estiver disponível na sessão.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.

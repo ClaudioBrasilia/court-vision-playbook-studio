@@ -63,6 +63,15 @@
 - [ ] O usuário deve visualizar o template antes de exportar e o mesmo estilo deve aparecer no MP4 final.
 - [ ] O template escolhido deve ser preservado ao salvar e abrir um projeto JSON.
 
+## Fase 3 — Biblioteca local de jogadas
+
+- [ ] O usuário deve poder nomear e salvar a jogada na biblioteca deste navegador.
+- [ ] A biblioteca deve listar projetos recentes com nome, data e tags de basquete.
+- [ ] O usuário deve poder buscar por nome ou tag.
+- [ ] O usuário deve poder reabrir uma jogada e restaurar marcações, duração, tags e configurações sociais.
+- [ ] O usuário deve poder excluir uma jogada da biblioteca.
+- [ ] A interface deve informar que o vídeo original precisa ser aberto novamente quando não estiver disponível na sessão.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.
