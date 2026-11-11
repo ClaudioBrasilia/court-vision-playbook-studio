@@ -36,6 +36,14 @@
 - [ ] O usuário deve poder adicionar título da jogada, contexto curto e perfil/marca, visualizando esses elementos antes da exportação.
 - [ ] Título, contexto e marca devem ser renderizados no MP4 final junto com setas, círculos, trajetórias e demais marcações.
 
+## Otimização mobile
+
+- [ ] Em telas menores, as ferramentas de desenho devem aparecer em uma barra inferior fixa, sem exigir o painel lateral de desktop.
+- [ ] A barra mobile deve oferecer Seta, Círculo, Linha, Marcar momento e acesso às demais ferramentas.
+- [ ] Os controles principais devem ter área de toque confortável e poder quebrar em várias linhas sem sobreposição.
+- [ ] O usuário deve poder abrir o vídeo em modo de foco/tela cheia para desenhar com o dedo.
+- [ ] O canvas deve continuar usando eventos de ponteiro e impedir rolagem acidental durante o desenho.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.

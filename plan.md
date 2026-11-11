@@ -34,6 +34,10 @@ Depois da simplificação do fluxo, a primeira camada de recursos inspirados em 
 
 O objetivo imediato é criar vídeos de jogadas para postagem, com a movimentação dos jogadores como foco. A exportação passa a oferecer presets Reels/TikTok 9:16, Feed 1:1, Quadra 16:9 e Original; o usuário pode ajustar o enquadramento horizontal para manter os jogadores visíveis. O painel também permite título da jogada, contexto curto e identificação do perfil, exibidos no preview e gravados no MP4. O formato vertical é o padrão inicial, mas o preset “Quadra 16:9” fica explícito para lances em que mostrar toda a quadra é mais importante que ocupar a tela do celular.
 
+## Otimização mobile
+
+Em telas menores, o painel lateral de desktop é substituído por uma barra inferior fixa com áreas de toque de pelo menos 44 px, ferramentas principais e um menu para as demais ferramentas e cores. Os controles de reprodução quebram em várias linhas para não ficarem apertados. O vídeo tem um modo de foco em tela cheia para desenhar com o dedo, mantendo `touch-none` e eventos Pointer no canvas para evitar rolagem acidental durante o gesto.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.

@@ -19,6 +19,9 @@ import {
   X,
   Undo2,
   Redo2,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -279,6 +282,8 @@ function Editor() {
   const [step, setStep] = useState<EditorStep>("open");
   const [playbackRate, setPlaybackRate] = useState(1);
   const [tags, setTags] = useState<string[]>([]);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [socialTitle, setSocialTitle] = useState("");
   const [socialSubtitle, setSocialSubtitle] = useState("");
   const [watermark, setWatermark] = useState("");
@@ -1003,10 +1008,10 @@ function Editor() {
       )}
 
       <div
-        className={`grid gap-4 p-4 ${step === "mark" ? "lg:grid-cols-[220px_1fr_260px]" : "lg:grid-cols-[1fr_300px]"}`}
+        className={`grid gap-4 p-4 pb-24 lg:pb-4 ${step === "mark" ? "lg:grid-cols-[220px_1fr_260px]" : "lg:grid-cols-[1fr_300px]"}`}
       >
         {step === "mark" && (
-          <aside className="space-y-4 rounded-xl border border-border bg-card p-3">
+          <aside className="hidden space-y-4 rounded-xl border border-border bg-card p-3 lg:block">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Ferramentas
             </p>
@@ -1157,7 +1162,19 @@ function Editor() {
         )}
 
         <main className="space-y-3">
-          <div className="relative overflow-hidden rounded-lg bg-muted">
+          <div
+            className={`relative overflow-hidden bg-muted ${focusMode ? "fixed inset-0 z-50 flex items-center justify-center rounded-none" : "rounded-lg"}`}
+          >
+            {src && (
+              <button
+                type="button"
+                onClick={() => setFocusMode((current) => !current)}
+                aria-label={focusMode ? "Sair da tela cheia" : "Desenhar em tela cheia"}
+                className="absolute right-3 top-3 z-20 flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-black/65 text-white shadow-lg backdrop-blur-sm"
+              >
+                {focusMode ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+              </button>
+            )}
             {src ? (
               <>
                 <video
@@ -1179,7 +1196,7 @@ function Editor() {
                         }
                       : undefined
                   }
-                  className="block w-full"
+                  className={`block w-full ${focusMode ? "max-h-[92vh] object-contain" : ""}`}
                   playsInline
                 />
                 <canvas
@@ -1245,30 +1262,30 @@ function Editor() {
           )}
           {src && step !== "export" && (
             <div className="rounded-xl border border-border bg-card p-3">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button
                   disabled={recording || exporting !== null}
                   onClick={togglePlay}
-                  className="w-20 rounded-md bg-secondary py-1.5 text-sm font-bold"
+                  className="min-h-11 min-w-20 rounded-md bg-secondary px-3 py-1.5 text-sm font-bold"
                 >
                   {playing ? "Pausar" : "Play"}
                 </button>
                 <button
                   onClick={() => seek(Math.max(0, time - 1 / 30))}
-                  className="rounded-md bg-secondary px-2 py-1.5 text-sm"
+                  className="min-h-11 rounded-md bg-secondary px-3 py-1.5 text-sm"
                 >
                   ◀ quadro
                 </button>
                 <button
                   onClick={() => seek(time + 1 / 30)}
-                  className="rounded-md bg-secondary px-2 py-1.5 text-sm"
+                  className="min-h-11 rounded-md bg-secondary px-3 py-1.5 text-sm"
                 >
                   quadro ▶
                 </button>
                 <button
                   type="button"
                   onClick={markCurrentMoment}
-                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground"
+                  className="min-h-11 rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground"
                 >
                   Marcar momento
                 </button>
@@ -1277,7 +1294,7 @@ function Editor() {
                   <select
                     value={playbackRate}
                     onChange={(event) => setPlaybackRate(Number(event.target.value))}
-                    className="rounded-md border border-input bg-background px-1.5 py-1 text-xs text-foreground"
+                    className="min-h-11 rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
                   >
                     <option value={0.25}>0,25x</option>
                     <option value={0.5}>0,5x</option>
@@ -1532,6 +1549,92 @@ function Editor() {
             </div>
           )}
         </main>
+        {step === "mark" && src && !focusMode && (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 p-2 shadow-[0_-8px_24px_rgba(0,0,0,.2)] backdrop-blur lg:hidden">
+            {mobileToolsOpen && (
+              <div className="mb-2 grid grid-cols-2 gap-2 rounded-xl border border-border bg-background p-2 sm:grid-cols-4">
+                {TOOLS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={
+                      recording ||
+                      exporting !== null ||
+                      (liveMode && item.id !== "circle" && item.id !== "spot")
+                    }
+                    onClick={() => {
+                      setTool(item.id);
+                      setMobileToolsOpen(false);
+                    }}
+                    className={`flex min-h-11 items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold disabled:opacity-40 ${tool === item.id ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    {item.label.split(" ")[0]}
+                  </button>
+                ))}
+                <div className="col-span-2 flex items-center gap-2 border-t border-border pt-2 sm:col-span-4">
+                  <span className="text-xs text-muted-foreground">Cor</span>
+                  {COLORS.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      aria-label={`Cor ${item}`}
+                      onClick={() => setColor(item)}
+                      style={{ background: item }}
+                      className={`h-9 w-9 rounded-full border-2 ${color === item ? "border-foreground" : "border-transparent"}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setMobileToolsOpen((current) => !current)}
+                className="flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-lg bg-secondary"
+                aria-label="Mais ferramentas"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setTool("arrow")}
+                className={`min-h-12 shrink-0 rounded-lg px-3 text-sm font-bold ${tool === "arrow" ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+              >
+                Seta
+              </button>
+              <button
+                type="button"
+                onClick={() => setTool("circle")}
+                className={`min-h-12 shrink-0 rounded-lg px-3 text-sm font-bold ${tool === "circle" ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+              >
+                Círculo
+              </button>
+              <button
+                type="button"
+                onClick={() => setTool("line")}
+                className={`min-h-12 shrink-0 rounded-lg px-3 text-sm font-bold ${tool === "line" ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+              >
+                Linha
+              </button>
+              <button
+                type="button"
+                onClick={markCurrentMoment}
+                className="min-h-12 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground"
+              >
+                Marcar momento
+              </button>
+              <button
+                type="button"
+                onClick={() => setFocusMode(true)}
+                className="flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-lg bg-secondary"
+                aria-label="Tela cheia"
+              >
+                <Maximize2 className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {step === "review" && (
           <aside className="space-y-3 rounded-xl border border-border bg-card p-3">
