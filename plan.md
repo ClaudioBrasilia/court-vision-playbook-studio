@@ -44,6 +44,10 @@ As marcações devem aparecer de forma progressiva para explicar a movimentaçã
 
 A timeline também oferece alças de início e fim em cada bloco de marcação. Elas podem ser arrastadas com mouse ou dedo, atualizam o vídeo para o novo início e registram o gesto inteiro como uma única ação no histórico.
 
+## Fase 2 — Templates para postagem
+
+O primeiro recurso da Fase 2 é um seletor de estilo social com quatro presets: Análise tática, Destaque, Jogada ensaiada e Dica rápida. Cada preset define a hierarquia, posição e cor de destaque do título, contexto e identificação, aparece na prévia e é renderizado no MP4. A escolha fica salva no projeto para repetir o mesmo padrão em novos ajustes.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.

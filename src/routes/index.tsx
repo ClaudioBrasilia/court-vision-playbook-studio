@@ -62,6 +62,7 @@ type Shape = {
 };
 type Aspect = "source" | "vertical" | "square" | "landscape";
 type EditorStep = "open" | "mark" | "review" | "export";
+type SocialTemplate = "tactical" | "highlight" | "setplay" | "tip";
 type ProjectFile = {
   version: 1;
   shapes: Shape[];
@@ -75,6 +76,7 @@ type ProjectFile = {
   socialSubtitle?: string;
   watermark?: string;
   socialOffset?: number;
+  socialTemplate?: SocialTemplate;
 };
 
 const TOOLS: { id: Tool; label: string; icon: LucideIcon }[] = [
@@ -101,6 +103,12 @@ const BASKETBALL_TAGS = [
   "Turnover",
   "Rebote",
   "Boa defesa",
+];
+const SOCIAL_TEMPLATES: { id: SocialTemplate; label: string; description: string }[] = [
+  { id: "tactical", label: "Análise tática", description: "Clara e objetiva" },
+  { id: "highlight", label: "Destaque", description: "Impacto para o lance" },
+  { id: "setplay", label: "Jogada ensaiada", description: "Foco no sistema" },
+  { id: "tip", label: "Dica rápida", description: "Formato educativo" },
 ];
 
 function drawShape(ctx: CanvasRenderingContext2D, s: Shape, W: number, H: number, t: number) {
@@ -306,6 +314,7 @@ function Editor() {
   const [socialSubtitle, setSocialSubtitle] = useState("");
   const [watermark, setWatermark] = useState("");
   const [socialOffset, setSocialOffset] = useState(0);
+  const [socialTemplate, setSocialTemplate] = useState<SocialTemplate>("tactical");
   const [, setHistoryVersion] = useState(0);
   const liveRef = useRef<{ shape: Shape; point: Pt } | null>(null);
   const shapesRef = useRef(shapes);
@@ -668,21 +677,33 @@ function Editor() {
     const title = socialTitle.trim();
     const subtitle = socialSubtitle.trim();
     const mark = watermark.trim();
-    if (!title && !subtitle && !mark) return;
+    const template = SOCIAL_TEMPLATES.find((item) => item.id === socialTemplate);
+    if (!title && !subtitle && !mark && !template) return;
+    const accent =
+      socialTemplate === "highlight" ? "#ffd60a" : socialTemplate === "tip" ? "#2ee6a6" : "#ff7a1a";
+    const top = socialTemplate === "highlight" ? 0.84 : socialTemplate === "tip" ? 0.72 : 0.1;
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,.8)";
     ctx.shadowBlur = Math.max(4, W / 180);
+    ctx.fillStyle = "rgba(8,10,14,.78)";
+    ctx.fillRect(W * 0.04, H * top - H * 0.055, Math.min(W * 0.78, W * 0.86), H * 0.13);
+    ctx.fillStyle = accent;
+    ctx.fillRect(W * 0.04, H * top - H * 0.055, Math.max(8, W * 0.012), H * 0.13);
+    ctx.textAlign = "left";
+    ctx.font = `800 ${Math.max(11, W / 38)}px sans-serif`;
+    ctx.fillStyle = accent;
+    ctx.fillText(template?.label.toUpperCase() ?? "", W * 0.07, H * top - H * 0.018);
     if (title) {
       ctx.textAlign = "left";
-      ctx.font = `800 ${Math.max(22, W / 18)}px sans-serif`;
+      ctx.font = `800 ${Math.max(20, W / 20)}px sans-serif`;
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(title, W * 0.06, H * 0.1);
+      ctx.fillText(title, W * 0.07, H * top + H * 0.034);
     }
     if (subtitle) {
       ctx.textAlign = "left";
-      ctx.font = `600 ${Math.max(14, W / 30)}px sans-serif`;
-      ctx.fillStyle = "#ffb36b";
-      ctx.fillText(subtitle, W * 0.06, H * (title ? 0.145 : 0.1));
+      ctx.font = `600 ${Math.max(13, W / 32)}px sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,.78)";
+      ctx.fillText(subtitle, W * 0.07, H * top + H * 0.065);
     }
     if (mark) {
       ctx.textAlign = "right";
@@ -887,6 +908,7 @@ function Editor() {
       socialSubtitle,
       watermark,
       socialOffset,
+      socialTemplate,
     };
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
@@ -913,6 +935,7 @@ function Editor() {
       setSocialSubtitle(project.socialSubtitle ?? "");
       setWatermark(project.watermark ?? "");
       setSocialOffset(project.socialOffset ?? 0);
+      setSocialTemplate(project.socialTemplate ?? "tactical");
       setProjectMessage("Projeto carregado. Abra o vídeo original para visualizar as marcações.");
     } catch {
       setProjectMessage("Não foi possível abrir este projeto.");
@@ -1287,23 +1310,30 @@ function Editor() {
                   className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
                 />
                 {step === "export" && (socialTitle || socialSubtitle || watermark) && (
-                  <div className="pointer-events-none absolute inset-0 p-[6%] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,.8)]">
+                  <div
+                    className={`pointer-events-none absolute left-[4%] right-[14%] ${socialTemplate === "highlight" ? "bottom-[12%]" : socialTemplate === "tip" ? "bottom-[24%]" : "top-[6%]"} border-l-4 border-primary bg-black/70 px-[3%] py-[2%] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,.8)]`}
+                  >
+                    <p
+                      className={`text-[clamp(.65rem,2vw,1rem)] font-black uppercase ${socialTemplate === "highlight" ? "text-yellow-300" : socialTemplate === "tip" ? "text-emerald-300" : "text-orange-300"}`}
+                    >
+                      {SOCIAL_TEMPLATES.find((item) => item.id === socialTemplate)?.label}
+                    </p>
                     {socialTitle && (
                       <p className="text-[clamp(1.2rem,4vw,3rem)] font-black leading-tight">
                         {socialTitle}
                       </p>
                     )}
                     {socialSubtitle && (
-                      <p className="mt-1 text-[clamp(.8rem,2vw,1.4rem)] font-bold text-orange-300">
+                      <p className="mt-1 text-[clamp(.8rem,2vw,1.4rem)] font-semibold text-white/80">
                         {socialSubtitle}
                       </p>
                     )}
-                    {watermark && (
-                      <p className="absolute bottom-[6%] right-[6%] text-sm font-bold opacity-90">
-                        {watermark}
-                      </p>
-                    )}
                   </div>
+                )}
+                {step === "export" && watermark && (
+                  <p className="pointer-events-none absolute bottom-[6%] right-[6%] text-sm font-bold text-white drop-shadow-[0_2px_6px_rgba(0,0,0,.8)]">
+                    {watermark}
+                  </p>
                 )}
               </>
             ) : (
@@ -1498,6 +1528,24 @@ function Editor() {
                             : "Original"}
                       <span className="mt-1 block font-normal text-muted-foreground">
                         {item.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Estilo do vídeo</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {SOCIAL_TEMPLATES.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => setSocialTemplate(template.id)}
+                      className={`rounded-lg border px-3 py-2 text-left ${socialTemplate === template.id ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}
+                    >
+                      <span className="block text-xs font-bold">{template.label}</span>
+                      <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+                        {template.description}
                       </span>
                     </button>
                   ))}

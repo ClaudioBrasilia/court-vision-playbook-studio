@@ -56,6 +56,13 @@
 - [ ] As alças devem funcionar com mouse e toque, respeitar duração mínima e não ultrapassar os limites do vídeo.
 - [ ] Um arraste temporal completo deve gerar uma única entrada no histórico de desfazer/refazer.
 
+## Fase 2 — Templates para postagem
+
+- [ ] A exportação deve oferecer os templates Análise tática, Destaque, Jogada ensaiada e Dica rápida.
+- [ ] Cada template deve aplicar uma hierarquia, posição e cor de destaque próprias para título e contexto.
+- [ ] O usuário deve visualizar o template antes de exportar e o mesmo estilo deve aparecer no MP4 final.
+- [ ] O template escolhido deve ser preservado ao salvar e abrir um projeto JSON.
+
 ## Preservação
 
 - [ ] A refatoração deve preservar captura, histórico, edição direta, projetos JSON, trajetória ao vivo, conversão MP4 e os testes existentes.
