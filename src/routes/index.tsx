@@ -328,6 +328,12 @@ function Editor() {
     origin: Pt;
     before: Shape[];
   } | null>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineEditRef = useRef<{
+    id: number;
+    edge: "start" | "end";
+    before: Shape[];
+  } | null>(null);
 
   const recordShapes = (next: Shape[]) => {
     pastRef.current = [...pastRef.current, shapesRef.current].slice(-50);
@@ -360,6 +366,50 @@ function Editor() {
     setShapes(next);
     setSelected(null);
     setHistoryVersion((version) => version + 1);
+  };
+  const copyShapes = (items: Shape[]) =>
+    items.map((shape) => ({ ...shape, pts: shape.pts.map((point) => ({ ...point })) }));
+  const startTimelineEdit = (event: React.PointerEvent, id: number, edge: "start" | "end") => {
+    if (exporting !== null || recording) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelected(id);
+    timelineEditRef.current = { id, edge, before: copyShapes(shapesRef.current) };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const updateTimelineEdit = (event: React.PointerEvent) => {
+    const edit = timelineEditRef.current;
+    const track = timelineRef.current;
+    if (!edit || !track || !length) return;
+    const rect = track.getBoundingClientRect();
+    const nextTime = Math.max(
+      0,
+      Math.min(length, ((event.clientX - rect.left) / rect.width) * length),
+    );
+    const next = shapesRef.current.map((shape) => {
+      if (shape.id !== edit.id) return shape;
+      if (edit.edge === "start") {
+        const end = shape.start + shape.dur;
+        const start = Math.min(nextTime, end - 0.05);
+        return { ...shape, start, dur: Math.max(0.05, end - start) };
+      }
+      const end = Math.max(shape.start + 0.05, nextTime);
+      return { ...shape, dur: Math.max(0.05, end - shape.start) };
+    });
+    shapesRef.current = next;
+    setShapes(next);
+    const changed = next.find((shape) => shape.id === edit.id);
+    if (changed) seek(changed.start);
+  };
+  const finishTimelineEdit = () => {
+    const edit = timelineEditRef.current;
+    if (!edit) return;
+    if (JSON.stringify(edit.before) !== JSON.stringify(shapesRef.current)) {
+      pastRef.current = [...pastRef.current, edit.before].slice(-50);
+      futureRef.current = [];
+      setHistoryVersion((version) => version + 1);
+    }
+    timelineEditRef.current = null;
   };
 
   const finishRecording = () => {
@@ -1337,7 +1387,7 @@ function Editor() {
                 Ativo: desenhe a seta e o vídeo volta a rodar sozinho. Desative para revisar cada
                 desenho parado.
               </p>
-              <div className="relative mt-3 h-10">
+              <div ref={timelineRef} className="relative mt-3 h-12 touch-none">
                 <input
                   type="range"
                   min={0}
@@ -1349,22 +1399,49 @@ function Editor() {
                 />
                 {length > 0 &&
                   shapes.map((s) => (
-                    <button
+                    <div
                       key={s.id}
-                      aria-label={`Selecionar ${s.trajectory ? "trajeto" : "marcação"} em ${fmt(s.start)}`}
-                      onClick={() => {
-                        setSelected(s.id);
-                        seek(s.start);
-                      }}
                       style={{
                         left: `${(s.start / length) * 100}%`,
-                        width: `${Math.max(0.5, (s.dur / length) * 100)}%`,
-                        background: s.color,
+                        width: `${Math.max(1, (s.dur / length) * 100)}%`,
                       }}
-                      className={`absolute top-6 h-3 rounded-sm opacity-80 ${selected === s.id ? "ring-2 ring-foreground" : ""}`}
-                    />
+                      className="absolute top-6 h-3"
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Selecionar ${s.trajectory ? "trajeto" : "marcação"} em ${fmt(s.start)}`}
+                        onClick={() => {
+                          setSelected(s.id);
+                          seek(s.start);
+                        }}
+                        style={{ background: s.color }}
+                        className={`absolute inset-0 rounded-sm opacity-80 ${selected === s.id ? "ring-2 ring-foreground" : ""}`}
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Ajustar início da marcação em ${fmt(s.start)}`}
+                        onPointerDown={(event) => startTimelineEdit(event, s.id, "start")}
+                        onPointerMove={updateTimelineEdit}
+                        onPointerUp={finishTimelineEdit}
+                        onPointerCancel={finishTimelineEdit}
+                        className="absolute -left-2 -top-2 z-10 h-7 w-4 cursor-ew-resize rounded-l-md border-2 border-white bg-primary shadow"
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Ajustar fim da marcação em ${fmt(s.start + s.dur)}`}
+                        onPointerDown={(event) => startTimelineEdit(event, s.id, "end")}
+                        onPointerMove={updateTimelineEdit}
+                        onPointerUp={finishTimelineEdit}
+                        onPointerCancel={finishTimelineEdit}
+                        className="absolute -right-2 -top-2 z-10 h-7 w-4 cursor-ew-resize rounded-r-md border-2 border-white bg-primary shadow"
+                      />
+                    </div>
                   ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Arraste as alças coloridas nas pontas de cada marcação para ajustar quando ela
+                começa e termina.
+              </p>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
                 <label>
                   Início do trecho: {fmt(clipStart)}

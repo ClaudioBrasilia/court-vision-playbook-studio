@@ -52,6 +52,9 @@
 - [ ] Círculos e holofotes devem receber um pulso sutil para destacar o jogador ou a região da quadra.
 - [ ] A duração e o início configurados na timeline devem continuar controlando a entrada e a saída de cada marcação.
 - [ ] A animação deve ser aplicada também no MP4 exportado, não apenas na prévia do editor.
+- [ ] Cada marcação na timeline deve apresentar alças visuais para ajustar início e fim.
+- [ ] As alças devem funcionar com mouse e toque, respeitar duração mínima e não ultrapassar os limites do vídeo.
+- [ ] Um arraste temporal completo deve gerar uma única entrada no histórico de desfazer/refazer.
 
 ## Preservação
 

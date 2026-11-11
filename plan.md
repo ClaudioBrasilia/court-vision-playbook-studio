@@ -42,6 +42,8 @@ Em telas menores, o painel lateral de desktop é substituído por uma barra infe
 
 As marcações devem aparecer de forma progressiva para explicar a movimentação, em vez de simplesmente surgir prontas. Setas, linhas tracejadas e linhas revelam o traçado e a ponta; o desenho livre revela os pontos gradualmente; zonas expandem até o tamanho desenhado; círculos e holofotes recebem um pulso sutil. A duração existente de cada anotação continua controlando quando ela aparece e desaparece, e a timeline permanece como o lugar para revisar esse intervalo.
 
+A timeline também oferece alças de início e fim em cada bloco de marcação. Elas podem ser arrastadas com mouse ou dedo, atualizam o vídeo para o novo início e registram o gesto inteiro como uma única ação no histórico.
+
 ## Estrutura relevante
 
 - `src/routes/index.tsx`: estado do editor, interação do canvas, reprodução, etapas e exportação.
