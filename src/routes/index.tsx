@@ -528,7 +528,10 @@ function Editor() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
       const target = event.target as HTMLElement | null;
-      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      if (
+        target?.isContentEditable ||
+        (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      )
         return;
       event.preventDefault();
       if (event.shiftKey) redo();
@@ -537,6 +540,18 @@ function Editor() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   });
+
+  // A velocidade escolhida precisa ser aplicada no elemento de vídeo (não é um atributo React).
+  useEffect(() => {
+    const videos = [
+      videoRef.current,
+      comparisonPrimaryVideoRef.current,
+      comparisonVideoRef.current,
+    ];
+    videos.forEach((video) => {
+      if (video) video.playbackRate = playbackRate;
+    });
+  }, [playbackRate, src, comparisonSrc, step]);
 
   const onLoaded = () => {
     const v = videoRef.current,
@@ -759,9 +774,9 @@ function Editor() {
     ctx.restore();
   };
 
-  const convertToMp4 = async (input: Blob): Promise<Blob> => {
+  const ensureFfmpeg = async () => {
     const { FFmpeg } = await import("@ffmpeg/ffmpeg");
-    const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
+    const { toBlobURL } = await import("@ffmpeg/util");
     const ffmpeg = ffmpegRef.current ?? new FFmpeg();
     ffmpegRef.current = ffmpeg;
     if (!ffmpegLoadedRef.current) {
@@ -774,6 +789,11 @@ function Editor() {
       });
       ffmpegLoadedRef.current = true;
     }
+    return ffmpeg;
+  };
+  const convertToMp4 = async (input: Blob): Promise<Blob> => {
+    const { fetchFile } = await import("@ffmpeg/util");
+    const ffmpeg = await ensureFfmpeg();
     setConverting(true);
     setProjectMessage("Convertendo o vídeo para MP4 compatível…");
     await ffmpeg.writeFile("input.webm", await fetchFile(input));
@@ -795,6 +815,31 @@ function Editor() {
       "output.mp4",
     ]);
     const data = await ffmpeg.readFile("output.mp4");
+    if (typeof data === "string") throw new Error("FFmpeg retornou saída inválida");
+    return new Blob([new Uint8Array(data)], { type: "video/mp4" });
+  };
+  // Instagram, TikTok e WhatsApp não reproduzem Opus dentro de MP4.
+  // Quando o navegador grava MP4 sem AAC, mantemos o vídeo e recodificamos só o áudio.
+  const fixAudioForMp4 = async (input: Blob): Promise<Blob> => {
+    const { fetchFile } = await import("@ffmpeg/util");
+    const ffmpeg = await ensureFfmpeg();
+    setConverting(true);
+    setProjectMessage("Ajustando o áudio para MP4 compatível (AAC)…");
+    await ffmpeg.writeFile("entrada.mp4", await fetchFile(input));
+    await ffmpeg.exec([
+      "-i",
+      "entrada.mp4",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-movflags",
+      "+faststart",
+      "saida.mp4",
+    ]);
+    const data = await ffmpeg.readFile("saida.mp4");
     if (typeof data === "string") throw new Error("FFmpeg retornou saída inválida");
     return new Blob([new Uint8Array(data)], { type: "video/mp4" });
   };
@@ -829,9 +874,15 @@ function Editor() {
     } catch {
       setExportError("O vídeo será exportado sem áudio porque o navegador bloqueou o áudio.");
     }
-    const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find(
-      (item) => MediaRecorder.isTypeSupported(item),
-    );
+    const mime = [
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4;codecs=avc1,mp4a.40.2",
+      "video/mp4;codecs=avc1",
+      "video/mp4",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp9",
+      "video/webm",
+    ].find((item) => MediaRecorder.isTypeSupported(item));
     if (!mime) {
       setExportError("Este navegador não permite exportar vídeos.");
       return;
@@ -912,7 +963,9 @@ function Editor() {
       const recordedBlob = new Blob(chunks, { type: mime });
       let blob: Blob;
       try {
-        blob = mime.includes("mp4") ? recordedBlob : await convertToMp4(recordedBlob);
+        if (!mime.includes("mp4")) blob = await convertToMp4(recordedBlob);
+        else if (mime.includes("mp4a")) blob = recordedBlob;
+        else blob = await fixAudioForMp4(recordedBlob);
       } catch {
         setExportError("Não foi possível converter o vídeo para MP4 neste navegador.");
         stream.getTracks().forEach((track) => track.stop());
@@ -983,12 +1036,13 @@ function Editor() {
   };
   const saveToLibrary = () => {
     const name = projectName.trim() || "Minha jogada";
+    const thumbnail = captureThumbnail();
     const entry: SavedPlay = {
       id: crypto.randomUUID(),
       name,
       updatedAt: new Date().toISOString(),
       tags,
-      thumbnail: captureThumbnail(),
+      ...(thumbnail ? { thumbnail } : {}),
       project: buildProject(),
     };
     persistLibrary([entry, ...savedPlays].slice(0, 30));
@@ -1060,15 +1114,17 @@ function Editor() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body">
-      <header className="flex items-center justify-between border-b border-border px-6 py-3">
-        <h1 className="font-display text-3xl tracking-wide">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-6 sm:py-3">
+        <h1 className="font-display text-xl tracking-wide sm:text-3xl">
           PRANCHETA<span className="text-primary">PRO</span>
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <label
-            className={`inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary ${recording || exporting !== null ? "opacity-40" : "cursor-pointer"}`}
+            aria-label="Abrir vídeo"
+            className={`inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold transition-colors hover:bg-secondary sm:px-4 ${recording || exporting !== null ? "opacity-40" : "cursor-pointer"}`}
           >
-            <Upload className="h-4 w-4" /> Abrir vídeo
+            <Upload className="h-4 w-4" />
+            <span className="hidden sm:inline">Abrir vídeo</span>
             <input
               type="file"
               accept="video/*"
@@ -1096,26 +1152,28 @@ function Editor() {
               }}
             />
           </label>
-          <ScreenCapture
-            disabled={recording || exporting !== null}
-            onCaptured={(url) => {
-              if (src) URL.revokeObjectURL(src);
-              setSrc(url);
-              setScreenCapture(true);
-              setCaptureZoom(1.28);
-              setCaptureOffset(0);
-              resetShapes();
-              setTags([]);
-              setSelected(null);
-              setTime(0);
-              setLength(0);
-              setClipStart(0);
-              setClipEnd(0);
-              setStep("open");
-              setExportError(null);
-              resetProjectMessage();
-            }}
-          />
+          <div className="hidden sm:block">
+            <ScreenCapture
+              disabled={recording || exporting !== null}
+              onCaptured={(url) => {
+                if (src) URL.revokeObjectURL(src);
+                setSrc(url);
+                setScreenCapture(true);
+                setCaptureZoom(1.28);
+                setCaptureOffset(0);
+                resetShapes();
+                setTags([]);
+                setSelected(null);
+                setTime(0);
+                setLength(0);
+                setClipStart(0);
+                setClipEnd(0);
+                setStep("open");
+                setExportError(null);
+                resetProjectMessage();
+              }}
+            />
+          </div>
           <button
             disabled={recording || exporting !== null}
             onClick={saveProject}
@@ -1487,7 +1545,6 @@ function Editor() {
                 <video
                   ref={videoRef}
                   src={src}
-                  playbackRate={playbackRate}
                   onLoadedMetadata={onLoaded}
                   onPlay={() => {
                     setPlaying(true);
@@ -2252,11 +2309,12 @@ function ScreenCapture({
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const captureOptions = {
         video: { frameRate: 30, displaySurface: "browser" },
         audio: true,
         preferCurrentTab: true,
-      });
+      } as DisplayMediaStreamOptions & { preferCurrentTab?: boolean };
+      const stream = await navigator.mediaDevices.getDisplayMedia(captureOptions);
       const mime = [
         "video/webm;codecs=vp9",
         "video/webm;codecs=vp8",
