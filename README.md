@@ -8,6 +8,14 @@ Se já existir um aplicativo que faça isso, use como referência. Referências 
 
 This project was built with [Lovable](https://lovable.dev).
 
+## Dois modos
+
+**Editor de vídeo** (`/`): desenha setas, círculos, zonas e textos sobre o vídeo real do jogo, com timeline, tags de basquete, biblioteca local e exportação MP4 em 9:16, 1:1, 16:9 ou original.
+
+**Prancheta 3D** (`/prancheta`): anima jogadas em quadra 3D com bonecos, setas animadas e laranja neon, no formato de Reels do método "gancho que contraria + prancheta animada + chamada para comentar". Traz quatro jogadas prontas (Triângulo ofensivo, Pick and roll, Horns e Zona 2-3), textos editáveis e gravação em 1080×1920. Use `?w=720&h=1280` na URL para renderizar mais leve em aparelhos sem GPU.
+
+O editor exporta com MediaRecorder e recodifica o áudio para AAC quando o navegador grava Opus, garantindo compatibilidade com Instagram, TikTok e WhatsApp.
+
 ## Build with Lovable
 
 Continue developing this project in the [Lovable editor](https://lovable.dev/projects/cd7d985b-0070-4e27-930a-58f730e1f4b8).

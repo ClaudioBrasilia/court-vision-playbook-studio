@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Crosshair,
@@ -1119,6 +1119,12 @@ function Editor() {
           PRANCHETA<span className="text-primary">PRO</span>
         </h1>
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          <Link
+            to="/prancheta"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground sm:px-4"
+          >
+            Prancheta 3D
+          </Link>
           <label
             aria-label="Abrir vídeo"
             className={`inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold transition-colors hover:bg-secondary sm:px-4 ${recording || exporting !== null ? "opacity-40" : "cursor-pointer"}`}
